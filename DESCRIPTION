@@ -29,10 +29,10 @@ Imports:
     geosphere,
     gstat,
     ggspatial,
-    DescTools
+    DescTools,
+    elevatr
 Remotes:
     rich-iannone/PuffR
-    jhollist/elevatr
 Depends:
     raster,
     sp,
