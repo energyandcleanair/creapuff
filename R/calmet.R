@@ -11,6 +11,7 @@
 #' @param calmet_templates (list) list with noobs and surfobs template full file paths
 #' @param only_make_additional_files F: make files anyway and do not skip; T: skip if output file already exists
 #' @param out_files MYSTERY: this one seems to be generated after this function is called, yet used here
+#' @param run_calmet whether to actually run CALMET 
 #'
 #' @return
 #' @export
@@ -25,7 +26,8 @@ calmet.generate_input <- function(
   calmet_exe,
   calmet_templates,
   only_make_additional_files=F,
-  out_files=NULL
+  out_files=NULL,
+  run_calmet=F
 ){
   
   
@@ -287,6 +289,10 @@ calmet.generate_input <- function(
     
     paste(calmet_exe, inp_file) %>% c('pause') %>% 
       writeLines(bat_file)
+    
+    if(run_calmet){
+      shell.exec(normalizePath(bat_file))
+    }
     
     params -> params_allgrids[[gridName]]
   }
