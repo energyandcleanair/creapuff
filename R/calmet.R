@@ -31,6 +31,13 @@ calmet.generate_input <- function(
   
   
   dir.create(output_dir, showWarnings = F, recursive = T)
+  
+  # Normalise paths: CALPUFF doesn't like ~
+  input_xls %<>% normalizePath()
+  wrf_dir %<>% normalizePath()
+  output_dir %<>% normalizePath()
+  gis_dir %<>% normalizePath()
+  calmet_exe %<>% normalizePath()
 
 
   # WRF ---------------------------------------------------------------------
@@ -267,7 +274,7 @@ calmet.generate_input <- function(
     #add all m3d files
     m3d_loc = grep('M3DDAT', inp.out)
     m3d_lines = paste('MM51.DAT       input     1  ! M3DDAT =',
-                      file.path(output_dir, m3d_to_use),
+                      file.path(wrf_dir, m3d_to_use),
                       ' !    !END!')
     
     inp.out = c(inp.out[1:(m3d_loc-1)],
