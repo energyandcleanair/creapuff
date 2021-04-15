@@ -39,6 +39,7 @@ calmet.generate_input <- function(
   
   # Find m3d files in wrf dir
   m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F)
+  if(length(m3d)==0) stop(sprintf("no .m3d file in %s",wrf_dir))
   m3d %<>% strsplit('_') %>% ldply %>% set_names(c('runName','gridName','date')) %>% tibble(path=m3d, .)
   m3d$date %<>% gsub(".m3d","",.) 
   last_date <- m3d$date[length(m3d$date) -1] %>% paste(.,"23", sep = " ") # LC. LastDate is the day before the last file
@@ -160,7 +161,7 @@ calmet.generate_input <- function(
     bb = extent(gridR)
     
     # LC : make GEO.DAT -> gridName.geo file (in output dir: working dir)
-    geo.file=paste0(gridName, '.geo') 
+    geo.file=file.path(output_dir, paste0(gridName, '.geo'))
     if(!file.exists(geo.file) | !only_make_additional_files) {
       zoom=8-floor(log(res)/log(2))
       
