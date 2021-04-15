@@ -29,7 +29,6 @@ calmet.generate_input <- function(
 ){
   
   
-  
   dir.create(output_dir, showWarnings = F, recursive = T)
   
   # Normalise paths: CALPUFF doesn't like ~
@@ -293,5 +292,10 @@ calmet.generate_input <- function(
   }
   
   saveRDS(params_allgrids, file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
-  return(params_allgrids)
+  
+  result = list(
+    grids=grids,
+    params=params_allgrids
+  )
+  return(result)
 }
