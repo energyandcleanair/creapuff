@@ -1,0 +1,45 @@
+Package: creapuff
+Type: Package
+Title: CREAPUFF: R package to work with CALMET and CALPUFF
+Version: 0.1
+Authors@R: c(
+    person("Hubert", "Thieriot", email = "hubert@energyandcleanair.org", role = c("cre","aut")),
+    person("Lauri", "Myllyvirta", email = "lauri@energyandcleanair.org", role = c("aut")),
+    person("Lorenzo", "Costantino", email = "lorenzo@energyandcleanair.org", role = c("aut"))
+    )
+Description: creapuff package offers a set of functions to create inputquery and plot air quality and weather data stored in CREA database.
+License: TBC
+Encoding: UTF-8
+LazyData: true
+Imports:
+    magrittr,
+    plyr,
+    tidyr,
+    dplyr,
+    reshape2,
+    data.table,
+    lubridate,
+    zoo,
+    lattice,
+    RColorBrewer,
+    rgeos,
+    rasterVis,
+    rworldmap,
+    sf,
+    geosphere,
+    gstat,
+    ggspatial,
+    DescTools
+Remotes:
+    rich-iannone/PuffR
+    jhollist/elevatr
+Depends:
+    raster,
+    sp,
+    ncdf4,
+    ggplot2
+Suggests: 
+    testthat(>= 2.1.0),
+VignetteBuilder:
+    knitr
+RoxygenNote: 7.1.1
