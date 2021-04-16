@@ -21,6 +21,7 @@ calpuff.generate_input <- function(
   input_xls,
   start_date, # Used to know which power plants are 'operating' or 'new'
   wrf_dir,
+  mod_dir,
   expand_grids,
   output_dir,
   grids,
@@ -125,12 +126,12 @@ calpuff.generate_input <- function(
     loc = outF %>% spdf %>% spTransform(target_crs)
     
     #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
-    get_recep(loc, nesfactL = nesfactL, output_dir=output_dir, calpuff_exe=calpuff_exe) -> topoAll[[run]]
+    get_recep(loc, nesfactL=nesfactL, output_dir=output_dir, calpuff_exe=calpuff_exe) -> topoAll[[run]]
     
     print(run)
   }
   
-  bgconcs = get_bgconcs(sources,  moddir="~/CALPUFF/background/")
+  bgconcs = get_bgconcs(sources,  mod_dir=mod_dir)
   
   o3dat = NULL #NULL : hourly Ozone Data File (Optional). No ozone monitoring stations, in both PH or Vietnam
   
@@ -151,7 +152,9 @@ calpuff.generate_input <- function(
     runsources %<>% spTransform(targetcrs)
     runsources %>% coordinates() %>% data.frame() %>% 
       set_names('UTMx', 'UTMy') %>% data.frame(runsources@data, .) -> runsources@data
-    runsources$base.elevation..msl <- getPlantElev(runsources, metfiles)
+    runsources$base.elevation..msl <- getPlantElev(runsources,
+                                                   dir=output_dir,
+                                                   outfiles=metfiles)
     
     runsources@data %<>% mutate(SO2 = SO2_tpa,
                                 SO4 = 0,

@@ -1,3 +1,4 @@
+sel <- dplyr::select
 
 getUTMproj <- function(zone=NULL,hem=NULL,loc=NULL,units="km") {
   

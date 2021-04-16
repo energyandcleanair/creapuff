@@ -40,7 +40,7 @@ NULL
 
 #' Pseudo-function to import \strong{sp}'s common functions.
 #'
-#' @importFrom sp spTransform CRS SpatialPointsDataFrame
+#' @importFrom sp spTransform CRS SpatialPointsDataFrame coordinates
 NULL
 
 #' Pseudo-function to import \strong{rgeos}'s common functions.

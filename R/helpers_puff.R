@@ -459,8 +459,10 @@ readGEO <- function(geoPath) {
 }
 
 
-getPlantElev <- function(sources.sp, outFiles) {
-  outFiles %>% arrange(GridD) %>% mutate(path = paste0(dir,gridName,".geo")) %>% use_series(path) %>% 
+getPlantElev <- function(sources.sp, dir, outFiles) {
+  outFiles %>% arrange(GridD) %>%
+    mutate(path = file.path(dir, paste0(gridName,".geo"))) %>%
+    use_series(path) %>% 
     lapply(readGEO) -> topoR
   sources.sp %<>% spTransform(crs(topoR[[1]]))
   topoR %>% lapply(extract, sources.sp) %>% data.frame -> elevs
@@ -589,7 +591,7 @@ make_toporows <- function(topoXYZ) {
 }
 
 
-get_bgconcs = function(sources, moddir="~/CALPUFF/background/") {
+get_bgconcs = function(sources, mod_dir) {
 
   sources %<>% spdf
   #retrieve concentrations from Asia nested runs
@@ -612,7 +614,7 @@ get_bgconcs = function(sources, moddir="~/CALPUFF/background/") {
   avgconcs <- list()
   
   for(i in 1:length(bgFiles)) {
-    nc_open(paste0(moddir, bgFiles[[i]])) -> nc
+    nc_open(file.path(mod_dir, bgFiles[[i]])) -> nc
     ncvar_get(nc, names(bgFiles)[i]) -> d
     aperm(d, c(2, 3, 1)) -> d
     datamonths = as.Date("2011-01-01") %>% 
@@ -642,7 +644,7 @@ get_bgconcs = function(sources, moddir="~/CALPUFF/background/") {
   names(concs) <- spec
   
   if(length(miss)>0) {
-    paste0(moddir, 'Geos-Chem_v8-02-04-geos5-Run2_bgconcs.grd') %>% 
+    file.path(mod_dir, 'Geos-Chem_v8-02-04-geos5-Run2_bgconcs.grd') %>% 
       stack %>% raster::extract(sources[miss, ]) %>% 
       data.frame(sources@data[miss, ], .) %>% 
       gather(var, val, contains("_M")) %>% 
