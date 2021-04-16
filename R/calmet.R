@@ -30,7 +30,7 @@ calmet.generate_input <- function(
   run_calmet=F
 ){
   
-  
+  result = list() # Storing results we'll need for CALPUFF
   dir.create(output_dir, showWarnings = F, recursive = T)
   
   # Normalise paths: CALPUFF doesn't like ~
@@ -128,14 +128,7 @@ calmet.generate_input <- function(
   }
   
   #create polygons of grid boundaries for plotting
-  domPols=list()
-  for(g in seq_along(grids)) {
-    grids[[g]] %>% extent %>% as('SpatialPolygons') -> domPols[[g]]
-    domPols[[g]]@polygons[[1]]@ID <- names(grids)[g]
-  }
-  
-  domPols %<>% Reduce(rbind, .)
-  crs(domPols) <- target_crs
+  domPols = gridsToDomPols(grids, target_crs)
   
   #admin boundaries for plotting
   getadm(gis_dir=gis_dir, level=0, res='low') %>% cropProj(domPols) -> admUTM
@@ -153,6 +146,8 @@ calmet.generate_input <- function(
   
   #make GEO.DAT and CALMET.INP files
   params_allgrids <- list()
+  start_dates <- list()
+  
   for(g in seq_along(grids)) {
     gridName = names(grids)[g]
     gridR = grids[[g]]
@@ -295,13 +290,15 @@ calmet.generate_input <- function(
     }
     
     params -> params_allgrids[[gridName]]
+    start_date -> start_dates[[gridName]]
   }
   
   saveRDS(params_allgrids, file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
   
-  result = list(
-    grids=grids,
-    params=params_allgrids
-  )
+  # Results needed for CALPUFF
+  result$grids <- grids
+  result$params <- params_allgrids
+  result$start_dates <- start_dates
+  
   return(result)
 }

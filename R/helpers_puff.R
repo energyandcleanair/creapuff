@@ -489,8 +489,11 @@ get_source_elev = function(sources, runName) {
 }
 
 
-get_recep <- function(casecity, nesfactL=c(4, 16, 40)) {
-  setwd(calpuffDir)
+get_recep <- function(casecity,
+                      nesfactL=c(4, 16, 40),
+                      output_dir,
+                      calpuff_exe) {
+  # setwd(calpuffDir)
   
   run=casecity$runName
   metfiles = outFilesAll %>% subset(runName == run) %>% arrange(desc(GridD))
@@ -543,28 +546,33 @@ get_recep <- function(casecity, nesfactL=c(4, 16, 40)) {
     grep('!', calpuffInp) %>% subset(. > drheader) -> drln
     if(length(drln) > 0) calpuffInp[-drln] -> calpuffInp
     
-    setPuff(calpuffInp,params) -> calpuffInp
+    setPuff(calpuffInp, params) -> calpuffInp
     
     #write into file
-    outinp <- paste0(source.id,"_elevgen_CALPUFF_7.0.inp")
-    writeLines(calpuffInp,outinp)  
+    outinp <- file.path(output_dir, paste0(source.id,"_elevgen_CALPUFF_7.0.inp"))
+    writeLines(calpuffInp, outinp)  
+    
+    org_dir <- getwd()
+    setwd(output_dir)
     
     #run CALPUFF setup to generate receptor grid  
     file.rename("qarecg.dat","qarecg_backup.dat")
-    system2("calpuff_v7.2.1.exe",args=outinp)
+    system2(calpuff_exe, args=outinp)
     
     #rename receptor file and move to input directory
-    file.rename("qarecg.dat",paste0(inpDir,paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_")))
+    file.rename("qarecg.dat", paste0(inpDir,paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_")))
+    
+    setwd(org_dir)
   }
   
   
   ##read the receptor file written by CALPUFF and generate nested grids of discrete receptors
-  setwd(inpDir)
+  # setwd(inpDir)
   
   #read in and merge files generated above
   nesfactL %>% 
     lapply(function(nf) {
-      paste0(inpDir,paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
+      paste0(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
         mutate(nesfact=nf)
     }) %>% bind_rows %>% spdf(crs=targetcrs)

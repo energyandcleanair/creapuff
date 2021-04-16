@@ -105,3 +105,17 @@ statmode <- function(x, na.rm = FALSE) {
   ux <- unique(x)
   ux[which.max(table(match(x, ux)))]
 }
+
+gridsToDomPols <- function(grids, target_crs){
+  #create polygons of grid boundaries for plotting
+  domPols=list()
+  for(g in seq_along(grids)) {
+    grids[[g]] %>% extent %>% as('SpatialPolygons') -> domPols[[g]]
+    domPols[[g]]@polygons[[1]]@ID <- names(grids)[g]
+  }
+  
+  domPols %<>% Reduce(rbind, .)
+  crs(domPols) <- target_crs
+  
+  return(domPols)
+}
