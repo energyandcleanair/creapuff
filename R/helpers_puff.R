@@ -67,7 +67,7 @@ make_outa = function(outFiles, onlyMakeAdditionalFiles) {
           writeLines(paste0(
             "echo ",outFiles[i,"StartDate"]," ",outFiles[i,"EndDate"]," ",
             gsub("/","\\\\",gsub(".out","",outFiles[i,"outFilePath"])),
-            " | C:\\tapm\\tapm2outa.exe"),con = batCon)
+            " | C:\\tapm\\tapm2outa.exe"),con = batCon) #TODO CLEAN THIS
         }
         
         #writeLines("pause",con=batCon)
@@ -341,8 +341,9 @@ clean_inp <- function(calpuffInp) {
 
 
 make_calpuff_inp <- function(metfiles,
+                             calpuff_template,
+                             output_dir,
                              puffrun=NULL,
-                             calpuffTemplate=get('calpuffTemplate', envir=.GlobalEnv),
                              sourceLines=NULL,
                              receptors=NULL,
                              OZONE.DAT=NULL,
@@ -350,13 +351,15 @@ make_calpuff_inp <- function(metfiles,
                              addparams=list(),
                              addsubgroups=list()) {
   
+  
+  
   if(is.null(puffrun)) puffrun=metfiles$runName[1]
   
   #read CALPUFF.INP
-  calpuffInp <- readLines(calpuffTemplate)
+  calpuffInp <- readLines(calpuff_template)
   
   metdir=metfiles$dir[1] %>% as.character()
-  outFilePath <- paste0(gsub("/","\\\\",metdir), puffrun)
+  outFilePath <- file.path(metdir, puffrun)
   
   metfiles %<>% arrange(desc(GridD))
   metrun=metfiles$runName[1] %>% as.character()
@@ -374,7 +377,7 @@ make_calpuff_inp <- function(metfiles,
   addparams$NMETDAT = nrow(metfiles)
   
   if(nrow(metfiles) == 1)
-    addparams$METDAT = paste0(gsub("/","\\\\",metfiles$dir),metfiles$gridName,"_CALMET.DAT")
+    addparams$METDAT = file.path(metdir, paste0(metfiles$gridName,"_CALMET.DAT"))
 
   if(is.null(metfiles$gridName)) stop('gridName cannot be NULL')
   for(r in 1:5) {
@@ -386,8 +389,8 @@ make_calpuff_inp <- function(metfiles,
     
     addparams[[paste0('METDAT',r)]] <- 
       ifelse(gridLevelAvailable,
-             paste0(gsub("/","\\\\",metfiles[r, "dir"]),
-                    metfiles[r,"gridName"],"_CALMET.DAT"),
+             file.path(metfiles[r, "dir"],
+                       paste0(metfiles[r,"gridName"],"_CALMET.DAT")),
              "not set")
   }
   
@@ -407,7 +410,7 @@ make_calpuff_inp <- function(metfiles,
   addparams$BCKNH3 = bgconcs[["NH3"]]
   if(is.null(bgconcs[["H2O2"]])) bgconcs[["H2O2"]]=bgconcs[["H2O_"]]
   addparams$BCKH2O2 = bgconcs[["H2O2"]]
-  addparams$OZDAT = ifelse(!is.null(OZONE.DAT), paste0(metdir, OZONE.DAT), "not set")
+  addparams$OZDAT = ifelse(!is.null(OZONE.DAT), file.path(metdir, OZONE.DAT), "not set")
   
   #set parameter values
   setparam(params, addparams) -> params
@@ -423,8 +426,8 @@ make_calpuff_inp <- function(metfiles,
     calpuffInp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=grm(sg, "^X"))
   
   #write into file
-  outF <- paste0(puffrun,"_CALPUFF_7.0.inp")
-  writeLines(calpuffInp, paste0(calpuffDir, "/", outF))  
+  outF <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp"))
+  writeLines(calpuffInp, outF)  
   
   return(outF)
 }
@@ -462,7 +465,7 @@ readGEO <- function(geoPath) {
 getPlantElev <- function(sources.sp, dir, outFiles) {
   outFiles %>% arrange(GridD) %>%
     mutate(path = file.path(dir, paste0(gridName,".geo"))) %>%
-    use_series(path) %>% 
+    magrittr::use_series(path) %>% 
     lapply(readGEO) -> topoR
   sources.sp %<>% spTransform(crs(topoR[[1]]))
   topoR %>% lapply(extract, sources.sp) %>% data.frame -> elevs
@@ -494,7 +497,10 @@ get_source_elev = function(sources, runName) {
 get_recep <- function(casecity,
                       nesfactL=c(4, 16, 40),
                       output_dir,
-                      calpuff_exe) {
+                      calpuff_exe,
+                      calpuff_template,
+                      outFilesAll,
+                      target_crs) {
   # setwd(calpuffDir)
   
   run=casecity$runName
@@ -524,7 +530,9 @@ get_recep <- function(casecity,
     
     #read CALPUFF.INP template
     metfiles %>% 
-      make_calpuff_inp(puffrun=source.id) %>% 
+      make_calpuff_inp(puffrun=source.id,
+                       calpuff_template=calpuff_template,
+                       output_dir=output_dir) %>% 
       readLines -> calpuffInp
     
     
@@ -555,14 +563,15 @@ get_recep <- function(casecity,
     writeLines(calpuffInp, outinp)  
     
     org_dir <- getwd()
+    # calpuff_dir <- dirname(calpuff_exe)
     setwd(output_dir)
     
     #run CALPUFF setup to generate receptor grid  
-    file.rename("qarecg.dat","qarecg_backup.dat")
+    # file.rename("qarecg.dat","qarecg_backup.dat")
     system2(calpuff_exe, args=outinp)
     
     #rename receptor file and move to input directory
-    file.rename("qarecg.dat", paste0(inpDir,paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_")))
+    file.rename("qarecg.dat", paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_"))
     
     setwd(org_dir)
   }
@@ -574,10 +583,10 @@ get_recep <- function(casecity,
   #read in and merge files generated above
   nesfactL %>% 
     lapply(function(nf) {
-      paste0(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
+      file.path(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
         mutate(nesfact=nf)
-    }) %>% bind_rows %>% spdf(crs=targetcrs)
+    }) %>% bind_rows %>% spdf(crs=target_crs)
 }
 
 
@@ -620,7 +629,7 @@ get_bgconcs = function(sources, mod_dir) {
     datamonths = as.Date("2011-01-01") %>% 
       seq.Date(by="day",length.out = 365) %>% 
       month %>% list
-    aaply(d, c(1, 2), 
+    apply(d, c(1, 2), 
           function(x) aggregate(x, by=datamonths, mean)$x) -> d.m
     brick(d.m) -> r
     extent(r) <- extent(c(xmin-xres/2,

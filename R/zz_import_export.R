@@ -8,7 +8,7 @@ magrittr::`%<>%`
 
 #' Pseudo-function to import \strong{magrittr}'s common functions.
 #'
-#' @importFrom magrittr set_names add subtract multiply_by divide_by
+#' @importFrom magrittr set_names add subtract multiply_by divide_by use_series
 NULL
 
 
@@ -27,6 +27,13 @@ NULL
 #'     pull tibble as_tibble rowwise any_vars all_vars vars collect
 NULL
 
+
+#' Pseudo-function to import \strong{tidyr}'s common functions.
+#'
+#' @importFrom tidyr spread gather
+NULL
+
+
 #' Pseudo-function to import \strong{lubridate}'s common functions.
 #'
 #' @importFrom lubridate ymd ymd_h year month day hour hour<-
@@ -35,7 +42,7 @@ NULL
 
 #' Pseudo-function to import \strong{raster}'s common functions.
 #'
-#' @importFrom raster raster crs extent resample values aggregate crs<-
+#' @importFrom raster raster rasterize crs extent resample values aggregate crs<-
 NULL
 
 #' Pseudo-function to import \strong{sp}'s common functions.

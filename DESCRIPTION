@@ -31,7 +31,8 @@ Imports:
     gstat,
     ggspatial,
     DescTools,
-    elevatr
+    elevatr,
+    pbapply
 Remotes:
     rich-iannone/PuffR
 Depends:
