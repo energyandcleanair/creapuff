@@ -296,6 +296,7 @@ calmet.generate_input <- function(
   saveRDS(params_allgrids, file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
   
   # Results needed for CALPUFF
+  result$run_name <- run_name
   result$grids <- grids
   result$params <- params_allgrids
   result$start_dates <- start_dates
