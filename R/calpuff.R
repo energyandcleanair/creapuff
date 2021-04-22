@@ -18,6 +18,7 @@
 #'
 #' @examples
 calpuff.generate_input <- function(
+  run_name,
   input_xls,
   start_date, # Used to know which power plants are 'operating' or 'new'
   wrf_dir,
@@ -32,6 +33,7 @@ calpuff.generate_input <- function(
   calpuff_template
 ){
   
+  result = list() # Storing results we'll need for CALPUFF
   
   # Normalise paths: CALPUFF doesn't like ~
   wrf_dir %<>% normalizePath()
@@ -126,12 +128,18 @@ calpuff.generate_input <- function(
     loc = outF %>% spdf %>% spTransform(target_crs)
     
     #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
-    get_recep(loc, nesfactL=nesfactL, output_dir=output_dir, calpuff_exe=calpuff_exe) -> topoAll[[run]]
+    get_recep(loc,
+              nesfactL=nesfactL,
+              output_dir=output_dir,
+              calpuff_exe=calpuff_exe,
+              calpuff_template=calpuff_template,
+              outFilesAll=outFilesAll,
+              target_crs=target_crs) -> topoAll[[run]]
     
     print(run)
   }
   
-  bgconcs = get_bgconcs(sources,  mod_dir=mod_dir)
+  bgconcs = get_bgconcs(sources,  mod_dir=file.path(gis_dir, "background"))
   
   o3dat = NULL #NULL : hourly Ozone Data File (Optional). No ozone monitoring stations, in both PH or Vietnam
   
@@ -151,10 +159,10 @@ calpuff.generate_input <- function(
     targetcrs = getUTMproj(metfiles$UTMZ[1], metfiles$UTMH[1])
     runsources %<>% spTransform(targetcrs)
     runsources %>% coordinates() %>% data.frame() %>% 
-      set_names('UTMx', 'UTMy') %>% data.frame(runsources@data, .) -> runsources@data
+      set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
     runsources$base.elevation..msl <- getPlantElev(runsources,
                                                    dir=output_dir,
-                                                   outfiles=metfiles)
+                                                   outFiles=metfiles)
     
     runsources@data %<>% mutate(SO2 = SO2_tpa,
                                 SO4 = 0,
@@ -209,18 +217,20 @@ calpuff.generate_input <- function(
     print(paste(metrun, sum(intopo$include), 'receptors'))
     if(sum(intopo$include)+metfiles$GridNX[1]*metfiles$GridNY[1]>=10000) stop('too many receptors!')
     
-    plotadm = getadm(0, 'coarse') %>% cropProj(r) # LC : #
-    quickpng(paste0(metrun, ' receptors.png'))     
-    intopo %>% subset(include) %>% plot(col='gray', cex=.5)
-    plotadm %>% plot(add=T, border='steelblue') # LC : #
+    plotadm = getadm(gis_dir, 0, 'coarse') %>% cropProj(r) # LC : #
+    quickpng(file.path(output_dir, paste0(metrun, ' receptors.png'))  )   
+    intopo %>% subset(include) %>% sp::plot(col='gray', cex=.5)
+    plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
     
-    runsources %>% plot(add=T)
+    runsources %>% sp::plot(add=T)
     dev.off()
     
     addparams = list(DATUM="WGS-84")
     
     for(puffrun in runsources$source.name) {
       make_calpuff_inp(metfiles,
+                       calpuff_template=calpuff_template,
+                       output_dir=output_dir,
                        puffrun=puffrun,
                        bgconcs = bgconcs[bgconcs$puffrun == puffrun,],
                        OZONE.DAT = o3dat,
@@ -235,14 +245,21 @@ calpuff.generate_input <- function(
   }
   
   #run CALPUFF
-  setwd(calpuffDir)
-  inpfiles_created %>% paste('calpuff_v7.2.1.exe', .) %>% pblapply(system)
+  org_dir <- getwd()
+  setwd(output_dir)
+  inpfiles_created %>% paste(calpuff_exe, .) %>% pbapply::pblapply(system)
   
   #create .bat files to run CALPUFF
   inpfiles_created %>% split(1) -> batches
   jobname='TESTVIET'
   for(i in seq_along(batches)) {
-    batches[[i]] %>% paste('calpuff_v7.2.1.exe', .) %>% c('pause') %>% 
+    batches[[i]] %>% paste(calpuff_exe, .) %>% c('pause') %>% 
       writeLines(paste0(jobname, '_', i, '.bat'))
   }
+  setwd(org_dir)
+  
+  # Results needed for PostProcessing
+  result$inpfiles_created <- inpfiles_created
+  
+  return(result)
 }
