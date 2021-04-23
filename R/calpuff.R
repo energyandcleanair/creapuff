@@ -59,7 +59,7 @@ calpuff.generate_input <- function(
            TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> outFiles
   
   outFiles$dir <- output_dir
-  if(!exists('outFilesAll')) outFiles -> outFilesAll
+  if(!exists('outfiles_all')) outFiles -> outfiles_all
   
   #create multiple .INP files for individual sources or source clusters
   calpuff_dir <- dirname(calpuff_exe)
@@ -133,7 +133,7 @@ calpuff.generate_input <- function(
               output_dir=output_dir,
               calpuff_exe=calpuff_exe,
               calpuff_template=calpuff_template,
-              outFilesAll=outFilesAll,
+              outfiles_all=outfiles_all,
               target_crs=target_crs) -> topoAll[[run]]
     
     print(run)
@@ -154,7 +154,7 @@ calpuff.generate_input <- function(
   queue = sources$runName %>% unique
   for(metrun in queue) {
     sources %>% filter(runName == metrun) %>% spdf -> runsources
-    metfiles <- outFilesAll %>% filter(runName == unique(runsources$runName))
+    metfiles <- outfiles_all %>% filter(runName == unique(runsources$runName))
     
     targetcrs = getUTMproj(metfiles$UTMZ[1], metfiles$UTMH[1])
     runsources %<>% spTransform(targetcrs)
@@ -260,6 +260,9 @@ calpuff.generate_input <- function(
   
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
+  result$sources <- sources
+  result$outfiles_all <- outfiles_all
+  result$pm10fraction <- pm10fraction
   
   return(result)
 }

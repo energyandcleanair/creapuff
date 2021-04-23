@@ -489,7 +489,7 @@ add_subgroup_lines = function(inp, lines, subgroup, skip_lines=NULL) {
 
 get_source_elev = function(sources, runName) {
   sources$base.elevation..msl <- 
-    getPlantElev(sources, outFilesAll %>% filter(runName == city_sp$runName))
+    getPlantElev(sources, outfiles_all %>% filter(runName == city_sp$runName))
   sources.out
 }
 
@@ -499,12 +499,12 @@ get_recep <- function(casecity,
                       output_dir,
                       calpuff_exe,
                       calpuff_template,
-                      outFilesAll,
+                      outfiles_all,
                       target_crs) {
   # setwd(calpuffDir)
   
   run=casecity$runName
-  metfiles = outFilesAll %>% subset(runName == run) %>% arrange(desc(GridD))
+  metfiles = outfiles_all %>% subset(runName == run) %>% arrange(desc(GridD))
   inpDir <- metfiles$dir[1]
   calmetRes <- metfiles$GridD[1] #resolution of the CALMET grid, in km
   calmetXY <- c(X=metfiles$GridX[1],Y=metfiles$GridY[1]) #origin (LL corner) of CALMET grid

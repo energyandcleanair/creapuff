@@ -43,12 +43,14 @@ calmet.generate_input <- function(
 
   # WRF ---------------------------------------------------------------------
   wd_org <- getwd()
-  setwd(wrf_dir)
+  setwd(output_dir)
   
   # Find m3d files in wrf dir
   m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F)
   if(length(m3d)==0) stop(sprintf("no .m3d file in %s",wrf_dir))
-  m3d %<>% strsplit('_') %>% ldply %>% set_names(c('runName','gridName','date')) %>% tibble(path=m3d, .)
+  m3d %<>% strsplit('_') %>% ldply %>%
+    set_names(c('runName','gridName','date')) %>%
+    tibble(path=file.path(wrf_dir, m3d), .)
   m3d$date %<>% gsub(".m3d","",.) 
   last_date <- m3d$date[length(m3d$date) -1] %>% paste(.,"23", sep = " ") # LC. LastDate is the day before the last file
   
@@ -270,7 +272,7 @@ calmet.generate_input <- function(
     #add all m3d files
     m3d_loc = grep('M3DDAT', inp.out)
     m3d_lines = paste('MM51.DAT       input     1  ! M3DDAT =',
-                      file.path(wrf_dir, m3d_to_use),
+                      m3d_to_use,
                       ' !    !END!')
     
     inp.out = c(inp.out[1:(m3d_loc-1)],

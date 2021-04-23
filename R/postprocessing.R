@@ -5,13 +5,21 @@
 #'
 #' @examples
 postprocessing <- function(
+  output_dir,
+  sources,
+  outfiles_all,
+  pm10fraction,
   pu_exe,
   pu_templates,
   calpost_exe,
   calpost_templates,
   run_name,
-  inpfiles_created
+  inpfiles_created,
+  run_calpost=T,
+  run_pu=T
   ){
+  
+  output_dir %<>% normalizePath()
   
   #generate POSTUTIL and CALPOST .inp files
   pu.inp.out <- gsub("^[^_]*", "", pu_templates)
@@ -39,7 +47,7 @@ postprocessing <- function(
     cp.runName <- runName
     
     metrun = sources$runName[sources$source.name==s]
-    metFiles = outFilesAll %>% filter(runName == metrun)
+    metFiles = outfiles_all %>% filter(runName == metrun)
     runDir = metFiles$dir[1]
     
     # setwd(pu.dir)
@@ -49,7 +57,7 @@ postprocessing <- function(
     
     #read CALPUFF.INP
     puffrun = s
-    puffInp <- paste0(calpuffDir, "/", puffrun,"_CALPUFF_7.0.inp") %>% readLines()
+    puffInp <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp")) %>% readLines()
     
     #set params read from CALPUFF.INP
     inparams[1,c('name', 'cpuname')] <- c("ISYR","IBYR")
@@ -83,15 +91,15 @@ postprocessing <- function(
       as.numeric() %>% abs %>% subtract(3)
     
     params %>% dplyr::select(-cpuname) %>% filter(!grepl("^IE", name)) -> params
-    conF <- paste0(runDir, runName, '.CON')
+    conF <- file.path(output_dir, paste0(runName, '.CON'))
     
     #set params determined by program
     params[nrow(params)+1,] <- c('UTLLST', gsub("\\.CON", "_POSTUTIL_REPART.LST", conF))
     params[nrow(params)+1,] <- c('UTLDAT', gsub("\\.CON", "_repart.CON", conF))
     params[nrow(params)+1,] <- c('NPER', nper)
     #write repartitioning INP file
-    write.inp(pu.t[1], 
-              paste0(runName, pu.inp.out[1]),
+    write.inp(pu_templates[1], 
+              file.path(output_dir, paste0(runName, pu.inp.out[1])),
               params)
     
     #write INP file to calculate total PM
@@ -100,18 +108,18 @@ postprocessing <- function(
     params[params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
     params[!(params$name %in% c('BCKNH3', 'UTLMET')), ] -> params
     
-    write.inp(pu.t[3], 
-              paste0(runName, pu.inp.out[3]),
+    write.inp(pu_templates[3], 
+              file.path(output_dir, paste0(runName, pu.inp.out[3])),
               params)
     
     #write deposition INP file
-    pu.depo.out = paste0(runName, pu.inp.out[2])
+    pu.depo.out = file.path(output_dir, paste0(runName, pu.inp.out[2]))
     params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", ".WET", conF)
     params[params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
     
     params[nrow(params)+1,] <- c('MODDAT', gsub("\\.CON", ".DRY", conF))
-    write.inp(pu.t[2], 
+    write.inp(pu_templates[2], 
               pu.depo.out,
               params)
     
@@ -124,7 +132,7 @@ postprocessing <- function(
     writeLines(pu.depo, pu.depo.out)
     
     #make CALPOST INP files
-    setwd(cp.dir)
+    # setwd(cp.dir)
     
     cp.period = get_cp_period(params)
     
@@ -153,8 +161,8 @@ postprocessing <- function(
     params[nrow(params)+1,] <- c("LD", discrete_receptors %>% as.character %>% substr(1,1))
     
     #write INP file to get all concentration outputs
-    write.inp(cp.t[1], 
-              paste0(runName, cp.inp.out[1]),
+    write.inp(calpost_templates[1], 
+              file.path(output_dir, paste0(runName, cp.inp.out[1])),
               params,
               set.all=F)
     
@@ -163,8 +171,8 @@ postprocessing <- function(
     
     #write INP file to get all deposition outputs
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
-    write.inp(cp.t[2], 
-              paste0(runName, cp.inp.out[2]),
+    write.inp(calpost_templates[2], 
+              file.path(output_dir, paste0(runName, cp.inp.out[2])),
               params,
               set.all=F)
   }
@@ -180,18 +188,26 @@ postprocessing <- function(
     source.subset <- source.subset[source.subset %in% 1:length(runNames)]
     
     if(length(source.subset)>0) {
-      setwd(pu.dir)
       
+      pu.bat <- file.path(output_dir, paste0("pu_", jobname, "_batch_", batch, ".bat"))
       expand.grid(runNames[source.subset], pu.inp.out) %>% apply(1, paste, collapse="") -> pu.runs
-      writeLines(c(paste("cd", pu.dir),
-                   paste0(pu.exe, " ", pu.runs), "pause"), 
-                 paste0(jobname, "_batch_", batch, ".bat"))
+      writeLines(c(paste("cd", output_dir),
+                   paste0(pu_exe, " ", normalizePath(file.path(output_dir, pu.runs))), "pause"), 
+                 pu.bat)
       
-      setwd(cp.dir)
+      if(run_pu){
+        shell.exec(normalizePath(pu.bat))
+      }
+      
+      calpost.bat <- file.path(output_dir, paste0("calpost_", jobname, "_batch_", batch, ".bat"))
       expand.grid(runNames[source.subset], cp.inp.out) %>% apply(1, paste, collapse="") -> cp.runs
-      writeLines(c(paste("cd", cp.dir),
-                   paste0(cp.exe, " ", cp.runs), "pause"), 
-                 paste0(jobname, "_batch_", batch, ".bat"))
+      writeLines(c(paste("cd", output_dir),
+                   paste0(calpost_exe, " ", file.path(output_dir, cp.runs)), "pause"), 
+                 calpost.bat)
+      
+      if(run_calpost){
+        shell.exec(normalizePath(calpost.bat))
+      }
     }
   }
   
