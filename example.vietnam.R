@@ -1,4 +1,4 @@
-# remotes::install_github("energyandcleanair/creapuff", dependencies=T, update=F)
+remotes::install_github("energyandcleanair/creapuff", dependencies=T, update=F)
 library(creapuff)
 
 
@@ -36,7 +36,7 @@ calpost_templates <- file.path("F:/templates/",
 
 # CALMET -----------------------------------------------------------------
 
-calmet.result <- creapuff::calmet.generate_input(
+calmet_result <- creapuff::runCalmet(
   input_xls = input_xls,
   wrf_dir = wrf_dir,
   expand_grids = expand_grids,
@@ -49,15 +49,15 @@ calmet.result <- creapuff::calmet.generate_input(
 
 # CALPUFF -----------------------------------------------------------------
 
-calpuff.result <- creapuff::calpuff.generate_input(
-  run_name= calmet.result$run_name,
-  start_date = calmet.result$start_dates[[1]],
+calpuff_result <- creapuff::runCalpuff(
+  run_name= calmet_result$run_name,
+  start_date = calmet_result$start_dates[[1]],
   input_xls = input_xls,
   wrf_dir = wrf_dir,
   expand_grids = expand_grids,
   output_dir = output_dir,
-  grids = calmet.result$grids,
-  params_allgrids = calmet.result$params,
+  grids = calmet_result$grids,
+  params_allgrids = calmet_result$params,
   gis_dir = gis_dir,
   calpuff_exe = calpuff_exe,
   calpuff_template = calpuff_template
@@ -66,15 +66,15 @@ calpuff.result <- creapuff::calpuff.generate_input(
 
 # POST PROCESSING -----------------------------------------------------------------
 
-creapuff::postprocessing(
+creapuff::runPostprocessing(
   output_dir=output_dir,
-  sources=calpuff.result$sources,
-  outfiles_all=calpuff.result$outfiles_all,
-  pm10fraction=calpuff.result$pm10fraction,
+  sources=calpuff_result$sources,
+  out_files_all=calpuff_result$out_files_all,
+  pm10fraction=calpuff_result$pm10fraction,
   pu_exe=pu_exe,
   pu_templates=pu_templates,
   calpost_exe=calpost_exe,
   calpost_templates=calpost_templates,
   run_name=run_name,
-  inpfiles_created=calpuff.result$inpfiles_created
+  inpfiles_created=calpuff_result$inpfiles_created
 )

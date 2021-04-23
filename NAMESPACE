@@ -2,9 +2,9 @@
 
 export("%<>%")
 export("%>%")
-export(calmet.generate_input)
-export(calpuff.generate_input)
-export(postprocessing)
+export(runCalmet)
+export(runCalpuff)
+export(runPostprocessing)
 importFrom(RColorBrewer,brewer.pal)
 importFrom(dplyr,all_vars)
 importFrom(dplyr,any_vars)
