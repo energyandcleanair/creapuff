@@ -2,7 +2,7 @@
 A R package to generate input for CALMET, CALPUFF and what not
 
 ## Example
-An example is available in [example.vietnam.R](example.vietnam.R), and will run on CALPUFF-2 VM.
+An example is available in [example_vietnam.R](example_vietnam.R), and will run on CALPUFF-2 VM.
 
 
 ## Naming conventions
