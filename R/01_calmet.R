@@ -49,19 +49,19 @@ runCalmet <- function(
   m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F)
   if(length(m3d)==0) stop(sprintf("no .m3d file in %s",wrf_dir))
   m3d %<>% strsplit('_') %>% ldply %>%
-    set_names(c('runName','gridName','date')) %>%
+    set_names(c('run_name','grid_name','date')) %>%
     tibble(path=file.path(wrf_dir, m3d), .)
   m3d$date %<>% gsub(".m3d","",.) 
   last_date <- m3d$date[length(m3d$date) -1] %>% paste(.,"23", sep = " ") # LC. LastDate is the day before the last file
   
   end_date = ymd_h(last_date) # LC
-  run_name <- m3d$runName[1] # LC
+  run_name <- m3d$run_name[1] # LC
   
   #build a data frame with the header info from all files
-  # m3d %<>% tibble(path=.) %>% mutate(gridName=gsub('\\.m3d', '', .),
+  # m3d %<>% tibble(path=.) %>% mutate(grid_name=gsub('\\.m3d', '', .),
   #                                   file=basename(path))
   
-  crs_header <- m3d %>% ddply(.(gridName), 
+  crs_header <- m3d %>% ddply(.(grid_name), 
                 function(df) {
                   crsinfo=df$path[1] %>% scan(skip=4, nlines=1, what=character())
                   starttime=df$path[1] %>% scan(skip=6, nlines=1, what=character()) 
@@ -72,10 +72,10 @@ runCalmet <- function(
   crs_header[,3:12] %<>% mutate_all(as.numeric)
   crs_header$starttime %<>% ymd_h
   m3d %<>% left_join(crs_header)
-  m3d$expand <- m3d$gridName %>% grepl(expand_grids, .)
+  m3d$expand <- m3d$grid_name %>% grepl(expand_grids, .)
   
   #read grid data from file
-  m3d_grid <- m3d %>% dlply(.(gridName), 
+  m3d_grid <- m3d %>% dlply(.(grid_name), 
                 function(df) {
                   df=df[1,]
                   read.table(df$path,
@@ -101,9 +101,9 @@ runCalmet <- function(
   #create raster objects in target crs that fit inside each WRF grid
   grids = list()
   for(g in seq_along(m3d_grid)) {
-    gridName = names(m3d_grid)[g]
-    res = m3d$d[m3d$gridName==gridName]
-    expand_degs = ifelse(m3d$expand[m3d$gridName==gridName][1],
+    grid_name = names(m3d_grid)[g]
+    res = m3d$d[m3d$grid_name==grid_name]
+    expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
                          res/100, 0)
     m3d_grid[[g]] %>% spdf %>% extent() %>% add(expand_degs) %>% 
       as('SpatialPolygons') -> lldomain # Non-skewed domain, in the original ll rcs
@@ -126,7 +126,7 @@ runCalmet <- function(
       shrink %<>% add(step)
     }
     
-    grids[[gridName]] = raster(bb_new, res=res, crs=target_crs)
+    grids[[grid_name]] = raster(bb_new, res=res, crs=target_crs)
   }
   
   #create polygons of grid boundaries for plotting
@@ -151,11 +151,11 @@ runCalmet <- function(
   start_dates <- list()
   
   for(g in seq_along(grids)) {
-    gridName = names(grids)[g]
+    grid_name = names(grids)[g]
     gridR = grids[[g]]
     res=res(gridR)[1]
     
-    start_date = m3d$starttime[m3d$gridName==gridName][1] + as.difftime(TZ, units='hours')
+    start_date = m3d$starttime[m3d$grid_name==grid_name][1] + as.difftime(TZ, units='hours')
     if(hour(start_date)>5) {
       start_date %<>% add(as.difftime(1, units='days'))
       hour(start_date)=0
@@ -165,8 +165,8 @@ runCalmet <- function(
     ny = nrow(gridR)
     bb = extent(gridR)
     
-    # LC : make GEO.DAT -> gridName.geo file (in output dir: working dir)
-    geo.file=file.path(output_dir, paste0(gridName, '.geo'))
+    # LC : make GEO.DAT -> grid_name.geo file (in output dir: working dir)
+    geo.file=file.path(output_dir, paste0(grid_name, '.geo'))
     if(!file.exists(geo.file) | !only_make_additional_files) {
       zoom=8-floor(log(res)/log(2))
       
@@ -207,26 +207,26 @@ runCalmet <- function(
       geo.out = c(geo.header, geo.lu, '1.0', geo.elev, rep(0, 6))
       geo.out %>% writeLines(geo.file)
       
-      quickpng(file.path(output_dir, paste(gridName, 'terrain.png')))
+      quickpng(file.path(output_dir, paste(grid_name, 'terrain.png')))
       levelplot(elev.out, col.regions=c('steelblue', terrain.colors(255)), margin=F, 
                 main='Terrain elevations') -> p
       print(p)
       dev.off()
       
       values(lu.out) <- lc_codes$LCCOwnLabel[match(lu.out[], lc_codes$USGS.code)] %>% as.factor()
-      quickpng(file.path(output_dir, paste(gridName, 'land use.png')))
+      quickpng(file.path(output_dir, paste(grid_name, 'land use.png')))
       levelplot(lu.out,main='Land use', 
                 col.regions=brewer.pal(12, 'Paired')[rev(c(1, 10, 4, 8, 3, 7))]) -> p
       print(p)
       dev.off()
     }
     
-    m3d_to_use = m3d$path[m3d$gridName==gridName] # LS : Select all days for each drid
+    m3d_to_use = m3d$path[m3d$grid_name==grid_name] # LS : Select all days for each drid
     
     params <- list(
-      GEODAT= file.path(output_dir, paste0(gridName, '.geo')),
-      METLST = paste0(gridName,"_CALMET.LST"),
-      METDAT = file.path(output_dir, paste0(gridName,"_CALMET.DAT")),
+      GEODAT= file.path(output_dir, paste0(grid_name, '.geo')),
+      METLST = paste0(grid_name,"_CALMET.LST"),
+      METDAT = file.path(output_dir, paste0(grid_name,"_CALMET.DAT")),
       NM3D = length(m3d_to_use),
       M3DDAT = 'not set',
       IBYR = year(start_date),
@@ -279,10 +279,10 @@ runCalmet <- function(
                 m3d_lines,
                 inp.out[-1:(-m3d_loc)])
     
-    inp_file = file.path(output_dir, paste0(gridName, '_CALMET.INP'))
+    inp_file = file.path(output_dir, paste0(grid_name, '_CALMET.INP'))
     inp.out %>% writeLines(inp_file)
     
-    bat_file = file.path(output_dir, paste0(gridName, '.bat'))
+    bat_file = file.path(output_dir, paste0(grid_name, '.bat'))
     
     paste(calmet_exe, inp_file) %>% c('pause') %>% 
       writeLines(bat_file)
@@ -291,8 +291,8 @@ runCalmet <- function(
       shell.exec(normalizePath(bat_file))
     }
     
-    params -> params_allgrids[[gridName]]
-    start_date -> start_dates[[gridName]]
+    params -> params_allgrids[[grid_name]]
+    start_date -> start_dates[[grid_name]]
   }
   
   saveRDS(params_allgrids, file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))

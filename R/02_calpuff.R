@@ -56,10 +56,10 @@ runCalpuff <- function(
            GridY=YORIGKM) %>% 
     mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
            EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
-           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> files_out
+           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> out_files
   
-  files_out$dir <- output_dir
-  if(!exists('files_out_all')) files_out -> files_out_all
+  out_files$dir <- output_dir
+  if(!exists('out_files_all')) out_files -> out_files_all
   
   #create multiple .INP files for individual sources or source clusters
   calpuff_dir <- dirname(calpuff_exe)
@@ -82,9 +82,9 @@ runCalpuff <- function(
   #  paste0('_', emis$Status_Simple) -> emis$scenario
   emis$scenario %>% nchar %>% max
   
-  #combine emissions data with files_out
-  emis$run_name <- files_out$run_name %>% unique
-  merge(emis, files_out[, c('run_name', 'UTMZ', 'UTMH')], all.x=T, all.y=F) %>% unique -> sources
+  #combine emissions data with out_files
+  emis$run_name <- out_files$run_name %>% unique
+  merge(emis, out_files[, c('run_name', 'UTMZ', 'UTMH')], all.x=T, all.y=F) %>% unique -> sources
   
   sources$Lat %<>% as.numeric()
   sources$Long %<>% as.numeric()
@@ -133,7 +133,7 @@ runCalpuff <- function(
               output_dir=output_dir,
               calpuff_exe=calpuff_exe,
               calpuff_template=calpuff_template,
-              files_out_all=files_out_all,
+              out_files_all=out_files_all,
               target_crs=target_crs) -> topoAll[[run]]
     
     print(run)
@@ -154,7 +154,7 @@ runCalpuff <- function(
   queue = sources$run_name %>% unique
   for(metrun in queue) {
     sources %>% filter(run_name == metrun) %>% spdf -> runsources
-    files_met <- files_out_all %>% filter(run_name == unique(runsources$run_name))
+    files_met <- out_files_all %>% filter(run_name == unique(runsources$run_name))
     
     targetcrs = getUTMproj(files_met$UTMZ[1], files_met$UTMH[1])
     runsources %<>% spTransform(targetcrs)
@@ -162,7 +162,7 @@ runCalpuff <- function(
       set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
     runsources$base.elevation..msl <- getPlantElev(runsources,
                                                    dir=output_dir,
-                                                   files_out=files_met)
+                                                   out_files=files_met)
     
     runsources@data %<>% mutate(SO2 = SO2_tpa,
                                 SO4 = 0,
@@ -261,7 +261,7 @@ runCalpuff <- function(
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
   result$sources <- sources
-  result$files_out_all <- files_out_all
+  result$out_files_all <- out_files_all
   result$pm10fraction <- pm10fraction
   
   return(result)
