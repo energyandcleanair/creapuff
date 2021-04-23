@@ -4,7 +4,7 @@
 #' @export
 #'
 #' @examples
-postprocessing <- function(
+runPostprocessing <- function(
   output_dir,
   sources,
   outfiles_all,

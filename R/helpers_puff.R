@@ -1,100 +1,100 @@
 #read coords and timezones from .def files
-read_def = function(defFiles) {
-  cbind(defFiles,Lat=NA,Lon=NA,TZ=NA,GridNX=NA,GridNY=NA,
-        UTMZ=NA,UTMH=NA,StartDate=NA,EndDate=NA) -> defFiles
+readDef = function(files_def) {
+  cbind(files_def,Lat=NA,Lon=NA,TZ=NA,GridNX=NA,GridNY=NA,
+        UTMZ=NA,UTMH=NA,StartDate=NA,EndDate=NA) -> files_def
   
-  for(i in 1:nrow(defFiles)) {
-    defCon <- file(as.character(defFiles[i,"defFilePath"]), open="rt")
-    readLines(defCon) -> indef
-    defFiles[i,c("Lat","Lon")] <- as.numeric(indef[c(4,5)])
-    defFiles[i,c("StartDate","EndDate")] <- indef[c(8,9)]
-    defFiles[i,c("TZ")] <- round(as.numeric(indef[10]),0)
-    defFiles[i,c("GridNX","GridNY")] <- as.numeric(indef[c(25,26)])
-    close(defCon)
+  for(i in 1:nrow(files_def)) {
+    def_con <- file(as.character(files_def[i,"file_def"]), open="rt")
+    readLines(def_con) -> indef
+    files_def[i,c("Lat","Lon")] <- as.numeric(indef[c(4,5)])
+    files_def[i,c("StartDate","EndDate")] <- indef[c(8,9)]
+    files_def[i,c("TZ")] <- round(as.numeric(indef[10]),0)
+    files_def[i,c("GridNX","GridNY")] <- as.numeric(indef[c(25,26)])
+    close(def_con)
   }
 }
 
 
 #find all .def files and .out files in the run directory and subdirectories
-get_outFiles=function(runDir, outFileExt, batchSubset=NULL) {
-  outFiles <- data.frame(outFilePath = gsub("//","/",list.files(path=runDir,pattern=paste0("*",outFileExt,"$"),recursive=T,full.names=T,include.dirs=T)))
-  defFiles <- data.frame(defFilePath = gsub("//","/",list.files(path=runDir,pattern="*.def",recursive=T,full.names=T,include.dirs=T)))
+getOutFiles=function(runDir, out_file_ext, batch_subset=NULL) {
+  files_out <- data.frame(file_out = gsub("//","/",list.files(path=runDir,pattern=paste0("*",out_file_ext,"$"),recursive=T,full.names=T,include.dirs=T)))
+  files_def <- data.frame(file_def = gsub("//","/",list.files(path=runDir,pattern="*.def",recursive=T,full.names=T,include.dirs=T)))
   
-  outFiles <- cbind(outFiles,
-                    runName = outFiles$outFilePath %>% 
+  files_out <- cbind(files_out,
+                    run_name = files_out$file_out %>% 
                       gsub("[a-zA-Z0-9_:]*/+","", .) %>% 
-                      get_runName,
-                    gridName = gsub(outFileExt,"",gsub("[a-zA-Z0-9_:]*/+","",outFiles$outFilePath)),
-                    dir = gsub(paste0("[a-zA-Z0-9_]*",outFileExt),"",outFiles$outFilePath))
-  defFiles$runName = defFiles$defFilePath %>% 
-    gsub("[a-zA-Z0-9_:]*/+","", .) %>% get_runName
+                      get_run_name,
+                    grid_name = gsub(out_file_ext,"",gsub("[a-zA-Z0-9_:]*/+","",files_out$file_out)),
+                    dir = gsub(paste0("[a-zA-Z0-9_]*",out_file_ext),"",files_out$file_out))
+  files_def$run_name = files_def$file_def %>% 
+    gsub("[a-zA-Z0-9_:]*/+","", .) %>% get_run_name
   
-  defFiles %<>% subset(!duplicated(runName))
+  files_def %<>% subset(!duplicated(run_name))
   
-  if(!is.null(batchSubset)) outFiles %<>% subset(runName %in% batchSubset)
+  if(!is.null(batch_subset)) files_out %<>% subset(run_name %in% batch_subset)
   
   #read coords and timezones from .def files
-  defFiles %<>% read_def
-  outFiles %>% join(defFiles,by="runName",match="first")
+  files_def %<>% readDef
+  files_out %>% join(files_def,by="run_name",match="first")
 }
 
 
 #make bat file to generate .geo and .outa files with TAPM utilities
-make_outa = function(outFiles, onlyMakeAdditionalFiles) {
-  for(batchName in outFiles$runName) {
-    for(i in which(outFiles$runName == batchName)) {
-      run.outa <- !file.exists(gsub(".out",".geo",outFiles[i, "outFilePath"])) | !onlyMakeAdditionalFiles 
-      run.geo <- !file.exists(gsub(".out",".outa",outFiles[i, "outFilePath"])) | !onlyMakeAdditionalFiles
+make_outa = function(files_out, tapm_dir, only_make_additional_files) {
+  for(batch_name in files_out$run_name) {
+    for(i in which(files_out$run_name == batch_name)) {
+      run.outa <- !file.exists(gsub(".out",".geo",files_out[i, "file_out"])) | !only_make_additional_files 
+      run.geo <- !file.exists(gsub(".out",".outa",files_out[i, "file_out"])) | !only_make_additional_files
       
       
       if(run.outa | run.geo) {
-        batCon <- file(paste0(tapmDir,outFiles[i,"gridName"],"_TAPMtoCALTAPM.bat"),open="wt")
+        file_bat_con <- file(paste0(tapm_dir,files_out[i,"grid_name"],"_TAPMtoCALTAPM.bat"),open="wt")
         if(run.outa) {
-          query.xy <- round(unlist(outFiles[i,c("GridNX","GridNY")])/2,0)
+          query.xy <- round(unlist(files_out[i,c("GridNX","GridNY")])/2,0)
           writeLines(paste0(
             "echo     ",query.xy[1],"     ",query.xy[2],
             "     1     7         0.         0.        ",
-            round(outFiles[i,"Lon"],3),
+            round(files_out[i,"Lon"],3),
             "     ",
-            round(outFiles[i,"Lat"],3),
+            round(files_out[i,"Lat"],3),
             "  ",
-            gsub("/","\\\\",gsub(".out","",outFiles[i,"outFilePath"])),
+            gsub("/","\\\\",gsub(".out","",files_out[i,"file_out"])),
             "  | C:\\tapm\\tapm2ts.exe"),
-            con = batCon)
+            con = file_bat_con)
         }
         
         if(run.geo) {
           writeLines(paste0(
-            "echo ",outFiles[i,"StartDate"]," ",outFiles[i,"EndDate"]," ",
-            gsub("/","\\\\",gsub(".out","",outFiles[i,"outFilePath"])),
-            " | C:\\tapm\\tapm2outa.exe"),con = batCon) #TODO CLEAN THIS
+            "echo ",files_out[i,"StartDate"]," ",files_out[i,"EndDate"]," ",
+            gsub("/","\\\\",gsub(".out","",files_out[i,"file_out"])),
+            " | C:\\tapm\\tapm2outa.exe"),con = file_bat_con) #TODO CLEAN THIS
         }
         
-        #writeLines("pause",con=batCon)
-        close(batCon) 
+        #writeLines("pause",con=file_bat_con)
+        close(file_bat_con) 
       }
     }
     
     #make .inp and .bat files to run CALTAPM
     
-    for(i in which(outFiles$runName == batchName)) {
-      if(!file.exists(gsub(outFileExt,".M3D",outFiles[i, "outFilePath"])) | 
-         !onlyMakeAdditionalFiles) {
-        batCon <- file(paste0(caltapmDir,outFiles[i,"gridName"],"_CALTAPM.bat"),open="wt")
-        writeLines(paste0("caltapm_v7.0.0 ",outFiles[i,"gridName"],"_CALTAPM.inp"),con = batCon)
-        #writeLines("pause",con=batCon)
-        close(batCon)
+    for(i in which(files_out$run_name == batch_name)) {
+      if(!file.exists(gsub(out_file_ext,".M3D",files_out[i, "file_out"])) | 
+         !only_make_additional_files) {
+        file_bat_con <- file(file.path(tapm_dir,paste0(files_out[i,"grid_name"],"_CALTAPM.bat")),open="wt")
+        writeLines(paste0("caltapm_v7.0.0 ",files_out[i,"grid_name"],"_CALTAPM.inp"),con = file_bat_con)
+        #writeLines("pause",con=file_bat_con)
+        close(file_bat_con)
         
         
-        inpCon <- file(paste0(caltapmDir,outFiles[i,"gridName"],"_CALTAPM.inp"),open="wt")
-        writeLines(paste0(gsub("/","\\\\",outFiles[i, "outFilePath"]),"a"),con = inpCon)             
-        writeLines(gsub("/","\\\\",outFiles[i, "defFilePath"]),con = inpCon)                 
-        writeLines(paste0(gsub(".out","",gsub("/","\\\\",outFiles[i, "outFilePath"])),".top"),con = inpCon)                  
-        writeLines(paste0(outFiles[i,"gridName"],"_CALTAPM.LST"),con = inpCon)              
-        writeLines(paste0(gsub(".out","",gsub("/","\\\\",outFiles[i, "outFilePath"])),".M3D"),con = inpCon)              
-        writeLines(paste0(outFiles[i,"StartDate"],"01     : beginning date for processing (LST time - YYYYMMDDHH)"),
+        inpCon <- file(file.path(tapm_dir, paste0(files_out[i,"grid_name"],"_CALTAPM.inp")), open="wt")
+        writeLines(paste0(gsub("/","\\\\",files_out[i, "file_out"]),"a"),con = inpCon)             
+        writeLines(gsub("/","\\\\",files_out[i, "file_def"]),con = inpCon)                 
+        writeLines(paste0(gsub(".out","",gsub("/","\\\\",files_out[i, "file_out"])),".top"),con = inpCon)                  
+        writeLines(paste0(files_out[i,"grid_name"],"_CALTAPM.LST"),con = inpCon)              
+        writeLines(paste0(gsub(".out","",gsub("/","\\\\",files_out[i, "file_out"])),".M3D"),con = inpCon)              
+        writeLines(paste0(files_out[i,"StartDate"],"01     : beginning date for processing (LST time - YYYYMMDDHH)"),
                    con = inpCon)
-        writeLines(paste0(outFiles[i,"EndDate"],"24     : ending    date for processing (LST time - YYYYMMDDHH)"),
+        writeLines(paste0(files_out[i,"EndDate"],"24     : ending    date for processing (LST time - YYYYMMDDHH)"),
                    con = inpCon)
         close(inpCon)
       }
@@ -104,33 +104,33 @@ make_outa = function(outFiles, onlyMakeAdditionalFiles) {
 
 
 #read data from  .geo files
-read_TAPM_GEO = function(outFiles, queue=1:nrow(outFiles), backup=T) {
-  outFiles %<>% mutate(GridX=NA,GridY=NA,GridD=NA,QA3D=NA)
+read_TAPM_GEO = function(files_out, queue=1:nrow(files_out), backup=T) {
+  files_out %<>% mutate(GridX=NA,GridY=NA,GridD=NA,QA3D=NA)
   
   for(i in queue) {
-    bupGeo <- paste0(outFiles[i, "dir"],"backup/",outFiles[i, "gridName"],".geo")
-    geo <- gsub(outFileExt,".geo",outFiles[i, "outFilePath"])
+    bupGeo <- paste0(files_out[i, "dir"],"backup/",files_out[i, "grid_name"],".geo")
+    geo <- gsub(out_file_ext,".geo",files_out[i, "file_out"])
     
     if(backup) {
       #make backup dir
-      dir.create(paste0(outFiles[i, "dir"],"backup"))
+      dir.create(file.path(files_out[i, "dir"], "backup"))
       #make backup file
       if(!file.exists(bupGeo))
         file.copy(geo, bupGeo,overwrite = F)
-    } else bupGeo <- paste0(outFiles[i, "dir"],outFiles[i, "gridName"],".geo")
+    } else bupGeo <- file.path(files_out[i, "dir"], paste0(files_out[i, "grid_name"], ".geo"))
     
     #read .geo file, save grid params 
     inGeoCon <- file(geo,open="rt")
     
-    geoData <- readLines(inGeoCon)
+    geo_data <- readLines(inGeoCon)
     inGeoCon <- file(geo,open="rt")
     
     #read grid extents and UTM zone from geo file
     gridData <- scan(inGeoCon,nmax=6,what=numeric(),skip=5, nlines=1)
-    outFiles[i,grepl("Grid",colnames(outFiles))] <- gridData[1:5]  
+    files_out[i, grepl("Grid",colnames(files_out))] <- gridData[1:5]  
     
-    outFiles[i, "UTMZ"] <- as.numeric(gsub("[A-Z]","",geoData[4]))
-    outFiles[i, "UTMH"] <- gsub(" ","",gsub("[0-9]+{1-2}","",geoData[4]))
+    files_out[i, "UTMZ"] <- as.numeric(gsub("[A-Z]","",geo_data[4]))
+    files_out[i, "UTMH"] <- gsub(" ","",gsub("[0-9]+{1-2}","",geo_data[4]))
     
     
     
@@ -138,25 +138,25 @@ read_TAPM_GEO = function(outFiles, queue=1:nrow(outFiles), backup=T) {
     
   }
   
-  return(outFiles)
+  return(files_out)
 }
 
 
-#overwrite the original .geo files with grid params from outFiles dataframe and with correct spacing
-make_geo = function(outFiles, queue=1:nrow(outFiles)) {
+#overwrite the original .geo files with grid params from files_out dataframe and with correct spacing
+makeGeo = function(files_out, queue=1:nrow(files_out)) {
   for(i in queue) {
-    inGeoCon <- file(paste0(outFiles[i, "dir"],"backup/",outFiles[i, "gridName"],".geo"),open="rt")
-    outGeoCon <- file(gsub(".out",".geo",outFiles[i, "outFilePath"]),open="wt")
+    inGeoCon <- file(paste0(files_out[i, "dir"],"backup/",files_out[i, "grid_name"],".geo"),open="rt")
+    outGeoCon <- file(gsub(".out",".geo",files_out[i, "file_out"]), open="wt")
     
-    geoData <- readLines(inGeoCon)
+    geo_data <- readLines(inGeoCon)
     
-    geoData[5] <- "WGS-84   10-10-2002  "
-    geoData[6] <- paste0(
-      paste(format(outFiles[i,c("GridNX","GridNY")],digits=0,width=8),collapse=""),
-      paste(format(outFiles[i,c("GridX","GridY","GridD","GridD")],nsmall=3,width=12),collapse=""))
+    geo_data[5] <- "WGS-84   10-10-2002  "
+    geo_data[6] <- paste0(
+      paste(format(files_out[i,c("GridNX","GridNY")],digits=0,width=8),collapse=""),
+      paste(format(files_out[i,c("GridX","GridY","GridD","GridD")],nsmall=3,width=12),collapse=""))
     
     #check for missing land use (lu) values and interpolate as needed
-    luCon <- textConnection(geoData[9:(9+outFiles[i,"GridNY"]-1)])
+    luCon <- textConnection(geo_data[9:(9+files_out[i,"GridNY"]-1)])
     lu <- as.matrix(read.table(luCon))
     if(sum(lu==0)>0)
     {
@@ -164,7 +164,7 @@ make_geo = function(outFiles, queue=1:nrow(outFiles)) {
       luR[luR==0]<-NA
       window=1
       luFill<-luR
-      while(sum(is.na(values(luFill)))>0 & window<outFiles[i,"GridNY"]/2)
+      while(sum(is.na(values(luFill)))>0 & window<files_out[i,"GridNY"]/2)
       {
         luFill <- focal(luR,w=matrix(1,1+2*window,1+2*window),NAonly=T,fun=mean,na.rm=T,pad=T)
         window=window+1
@@ -172,12 +172,12 @@ make_geo = function(outFiles, queue=1:nrow(outFiles)) {
       
       lu<-round(as.matrix(luFill),-1)
       
-      for(l in 1:outFiles[i,"GridNY"])
-        geoData[9+l-1] <- paste0(" ",paste(lu[l,],collapse = " "))
+      for(l in 1:files_out[i,"GridNY"])
+        geo_data[9+l-1] <- paste0(" ",paste(lu[l,],collapse = " "))
     }
     
     
-    writeLines(geoData,con=outGeoCon)
+    writeLines(geo_data, con=outGeoCon)
     
     close(inGeoCon)
     close(outGeoCon)
@@ -223,50 +223,50 @@ TZstring <- function(x) paste0("UTC",
                                stringr::str_pad(abs(x), 2, "left", "0"), "00")
 
 
-write.inp <- function(template.file, out.file, params, ...) {
-  readLines(template.file) -> pu.inp
+writeInp <- function(file_template, file_out, params, ...) {
+  readLines(file_template) -> pu.inp
   setPuff(pu.inp, params, ...) -> pu.inp
-  outcon <- file(out.file, "w")
+  outcon <- file(file_out, "w")
   writeLines(pu.inp, outcon)
   close(outcon)
 }
 
 
-makeparams <- function(outFiles) {
+makeParams <- function(files_out) {
   #define parameters to set in CALPUFF.INP
   
   #start and end times
   paramlist <- 
     list(
       #times
-      IBYR = substr(outFiles$StartDate, 1, 4),
-      IBMO = substr(outFiles$StartDate, 5, 6),
-      IBDY=substr(outFiles$StartDate, 7, 8),
-      IEYR=substr(outFiles$EndDate, 1, 4),
-      IEMO=substr(outFiles$EndDate, 5, 6),
-      IEDY=substr(outFiles$EndDate, 7, 8),
+      IBYR = substr(files_out$StartDate, 1, 4),
+      IBMO = substr(files_out$StartDate, 5, 6),
+      IBDY=substr(files_out$StartDate, 7, 8),
+      IEYR=substr(files_out$EndDate, 1, 4),
+      IEMO=substr(files_out$EndDate, 5, 6),
+      IEDY=substr(files_out$EndDate, 7, 8),
   
       #timezone
-      ABTZ=TZstring(outFiles$TZ),
+      ABTZ=TZstring(files_out$TZ),
       
       #grid settings
-      IUTMZN=outFiles$UTMZ,
-      UTMHEM=outFiles$UTMH,
-      DGRIDKM=outFiles$GridD,
-      NX=outFiles$GridNX,
-      NY=outFiles$GridNY,
-      IECOMP=outFiles$GridNX,
-      JECOMP=outFiles$GridNY,
-      IESAMP=outFiles$GridNX,
-      JESAMP=outFiles$GridNY,
-      XORIGKM=outFiles$GridX,
-      YORIGKM=outFiles$GridY)
+      IUTMZN=files_out$UTMZ,
+      UTMHEM=files_out$UTMH,
+      DGRIDKM=files_out$GridD,
+      NX=files_out$GridNX,
+      NY=files_out$GridNY,
+      IECOMP=files_out$GridNX,
+      JECOMP=files_out$GridNY,
+      IESAMP=files_out$GridNX,
+      JESAMP=files_out$GridNY,
+      XORIGKM=files_out$GridX,
+      YORIGKM=files_out$GridY)
   
-  setparam(name=paramlist)
+  setParam(name=paramlist)
 }
 
 
-setparam <- function(df=NULL, name, value=NULL) {
+setParam <- function(df=NULL, name, value=NULL) {
   if(is.null(df)) df = data.frame(name=NA, val=NA)[F, ]
   if(!is.list(name)) {
     name = as.list(value)
@@ -296,7 +296,7 @@ getParamVal <- function(parname, inp, max.number=1) {
 
 
 #read information from cALPUFF.INP files
-read_puffinp <- function(file,
+readPuffInp <- function(file,
                          inparams = c('IBYR', 'IEYR', 
                                       'BCKNH3', 'BCKO3', 'BCKH2O2',
                                       'SRCNAM', 'IUTMZN',
@@ -327,20 +327,20 @@ read_puffinp <- function(file,
 
 
 #remove discrete receptors and emissions sources from calpuff INP
-clean_inp <- function(calpuffInp) {
-  grep('^Subgroup \\(13b\\)', calpuffInp) -> psst
-  grep('^Subgroup \\(13c\\)', calpuffInp) -> psend
-  grep('!', calpuffInp) %>% subset(. %in% psst:psend) -> psln
-  if(length(psln)>0) calpuffInp[-psln] -> calpuffInp
+cleanInp <- function(calpuff_inp) {
+  grep('^Subgroup \\(13b\\)', calpuff_inp) -> psst
+  grep('^Subgroup \\(13c\\)', calpuff_inp) -> psend
+  grep('!', calpuff_inp) %>% subset(. %in% psst:psend) -> psln
+  if(length(psln)>0) calpuff_inp[-psln] -> calpuff_inp
   
-  grep('^Subgroup \\(20c\\)', calpuffInp) -> drheader
-  grep('!', calpuffInp) %>% subset(. > drheader) -> drln
-  if(length(drln)>0) calpuffInp[-drln] -> calpuffInp
-  return(calpuffInp)
+  grep('^Subgroup \\(20c\\)', calpuff_inp) -> drheader
+  grep('!', calpuff_inp) %>% subset(. > drheader) -> drln
+  if(length(drln)>0) calpuff_inp[-drln] -> calpuff_inp
+  return(calpuff_inp)
 }
 
 
-make_calpuff_inp <- function(metfiles,
+makeCalpuffInp <- function(files_met,
                              calpuff_template,
                              output_dir,
                              puffrun=NULL,
@@ -353,54 +353,54 @@ make_calpuff_inp <- function(metfiles,
   
   
   
-  if(is.null(puffrun)) puffrun=metfiles$runName[1]
+  if(is.null(puffrun)) puffrun=files_met$run_name[1]
   
   #read CALPUFF.INP
-  calpuffInp <- readLines(calpuff_template)
+  calpuff_inp <- readLines(calpuff_template)
   
-  metdir=metfiles$dir[1] %>% as.character()
-  outFilePath <- file.path(metdir, puffrun)
+  metdir=files_met$dir[1] %>% as.character()
+  file_out <- file.path(metdir, puffrun)
   
-  metfiles %<>% arrange(desc(GridD))
-  metrun=metfiles$runName[1] %>% as.character()
+  files_met %<>% arrange(desc(GridD))
+  metrun=files_met$run_name[1] %>% as.character()
   
     
-  params <- metfiles %>% head(1) %>% makeparams()
+  params <- files_met %>% head(1) %>% makeParams()
   
   #additional parameters
   addparams$NREC = length(receptors)
   addparams$NPT1 = length(sourceLines)/4
   
   #met domains and data files
-  print(paste0("Number of domains is ", nrow(metfiles)))
-  addparams$NMETDOM = nrow(metfiles)
-  addparams$NMETDAT = nrow(metfiles)
+  print(paste0("Number of domains is ", nrow(files_met)))
+  addparams$NMETDOM = nrow(files_met)
+  addparams$NMETDAT = nrow(files_met)
   
-  if(nrow(metfiles) == 1)
-    addparams$METDAT = file.path(metdir, paste0(metfiles$gridName,"_CALMET.DAT"))
+  if(nrow(files_met) == 1)
+    addparams$METDAT = file.path(metdir, paste0(files_met$grid_name,"_CALMET.DAT"))
 
-  if(is.null(metfiles$gridName)) stop('gridName cannot be NULL')
+  if(is.null(files_met$grid_name)) stop('grid_name cannot be NULL')
   for(r in 1:5) {
-    gridLevelAvailable <- (!is.na(metfiles[r,"gridName"]) & nrow(metfiles)>1)
+    gridLevelAvailable <- (!is.na(files_met[r,"grid_name"]) & nrow(files_met)>1)
     addparams[[paste0('DOMAIN',r)]] <-
       ifelse(gridLevelAvailable,
-             as.character(metfiles[r,"gridName"]),
+             as.character(files_met[r,"grid_name"]),
              "not set")
     
     addparams[[paste0('METDAT',r)]] <- 
       ifelse(gridLevelAvailable,
-             file.path(metfiles[r, "dir"],
-                       paste0(metfiles[r,"gridName"],"_CALMET.DAT")),
+             file.path(files_met[r, "dir"],
+                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")),
              "not set")
   }
   
   #output file names
-  addparams$CONDAT = paste0(outFilePath,".CON")
-  addparams$DFDAT = paste0(outFilePath,".DRY")
-  addparams$WFDAT = paste0(outFilePath,".WET")
-  addparams$VISDAT = paste0(outFilePath,".VIS")
-  addparams$BALDAT = paste0(outFilePath,".BAL")
-  addparams$PUFLST = paste0(outFilePath,"_CALPUFF.LST")
+  addparams$CONDAT = paste0(file_out,".CON")
+  addparams$DFDAT = paste0(file_out,".DRY")
+  addparams$WFDAT = paste0(file_out,".WET")
+  addparams$VISDAT = paste0(file_out,".VIS")
+  addparams$BALDAT = paste0(file_out,".BAL")
+  addparams$PUFLST = paste0(file_out,"_CALPUFF.LST")
   
   #background concentrations
   addparams$MOZ = ifelse(!is.null(OZONE.DAT), 1, 0)
@@ -413,21 +413,21 @@ make_calpuff_inp <- function(metfiles,
   addparams$OZDAT = ifelse(!is.null(OZONE.DAT), file.path(metdir, OZONE.DAT), "not set")
   
   #set parameter values
-  setparam(params, addparams) -> params
-  setPuff(calpuffInp,params) -> calpuffInp
+  setParam(params, addparams) -> params
+  setPuff(calpuff_inp,params) -> calpuff_inp
   
   #remove discrete receptors and emissions sources from calpuff INP
-  calpuffInp %<>% clean_inp()
+  calpuff_inp %<>% cleanInp()
   
   if(!is.null(sourceLines)) addsubgroups %<>% c(list(X13b = sourceLines))
   if(!is.null(receptors))   addsubgroups %<>% c(list(X20c = receptors))
   
   for(sg in names(addsubgroups))
-    calpuffInp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=grm(sg, "^X"))
+    calpuff_inp %<>% addSubgroupLines(addsubgroups[[sg]], subgroup=grm(sg, "^X"))
   
   #write into file
   outF <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp"))
-  writeLines(calpuffInp, outF)  
+  writeLines(calpuff_inp, outF)  
   
   return(outF)
 }
@@ -462,9 +462,9 @@ readGEO <- function(geoPath) {
 }
 
 
-getPlantElev <- function(sources.sp, dir, outFiles) {
-  outFiles %>% arrange(GridD) %>%
-    mutate(path = file.path(dir, paste0(gridName,".geo"))) %>%
+getPlantElev <- function(sources.sp, dir, files_out) {
+  files_out %>% arrange(GridD) %>%
+    mutate(path = file.path(dir, paste0(grid_name,".geo"))) %>%
     magrittr::use_series(path) %>% 
     lapply(readGEO) -> topoR
   sources.sp %<>% spTransform(crs(topoR[[1]]))
@@ -473,7 +473,7 @@ getPlantElev <- function(sources.sp, dir, outFiles) {
 }
 
 
-add_subgroup_lines = function(inp, lines, subgroup, skip_lines=NULL) {
+addSubgroupLines = function(inp, lines, subgroup, skip_lines=NULL) {
   if(!grepl("Subgroup", subgroup)) subgroup %<>% paste0("Subgroup (",.,")")
   header_ln = grep(subgroup,inp, fixed=T)
   if(is.null(skip_lines)) {
@@ -487,29 +487,29 @@ add_subgroup_lines = function(inp, lines, subgroup, skip_lines=NULL) {
 }
 
 
-get_source_elev = function(sources, runName) {
+getSourceElev = function(sources, run_name) {
   sources$base.elevation..msl <- 
-    getPlantElev(sources, outfiles_all %>% filter(runName == city_sp$runName))
+    getPlantElev(sources, files_out_all %>% filter(run_name == city_sp$run_name))
   sources.out
 }
 
 
-get_recep <- function(casecity,
+getRecep <- function(casecity,
                       nesfactL=c(4, 16, 40),
                       output_dir,
                       calpuff_exe,
                       calpuff_template,
-                      outfiles_all,
+                      files_out_all,
                       target_crs) {
   # setwd(calpuffDir)
   
-  run=casecity$runName
-  metfiles = outfiles_all %>% subset(runName == run) %>% arrange(desc(GridD))
-  inpDir <- metfiles$dir[1]
-  calmetRes <- metfiles$GridD[1] #resolution of the CALMET grid, in km
-  calmetXY <- c(X=metfiles$GridX[1],Y=metfiles$GridY[1]) #origin (LL corner) of CALMET grid
-  GridNX <- metfiles$GridNX[1]
-  GridNY <- metfiles$GridNY[1]
+  run=casecity$run_name
+  files_met = files_out_all %>% subset(run_name == run) %>% arrange(desc(GridD))
+  inpDir <- files_met$dir[1]
+  calmetRes <- files_met$GridD[1] #resolution of the CALMET grid, in km
+  calmetXY <- c(X=files_met$GridX[1],Y=files_met$GridY[1]) #origin (LL corner) of CALMET grid
+  GridNX <- files_met$GridNX[1]
+  GridNY <- files_met$GridNY[1]
   
   source.id <- casecity$source.name #city_short # LC
   cluster.center <- casecity %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
@@ -529,11 +529,11 @@ get_recep <- function(casecity,
     JBSAMP %<>% max(1)
     
     #read CALPUFF.INP template
-    metfiles %>% 
-      make_calpuff_inp(puffrun=source.id,
+    files_met %>% 
+      makeCalpuffInp(puffrun=source.id,
                        calpuff_template=calpuff_template,
                        output_dir=output_dir) %>% 
-      readLines -> calpuffInp
+      readLines -> calpuff_inp
     
     
     params <- list(NREC = 0, #no non-gridded receptors
@@ -547,20 +547,20 @@ get_recep <- function(casecity,
                    NPT1=0) #no emission sources
     
     #remove discrete receptors and emissions sources from calpuff INP
-    grep('^Subgroup \\(13b\\)', calpuffInp) -> psst
-    grep('^Subgroup \\(13c\\)', calpuffInp) -> psend
-    grep('!', calpuffInp) %>% subset(. %in% psst:psend) -> psln
-    if(length(psln) > 0) calpuffInp[-psln] -> calpuffInp
+    grep('^Subgroup \\(13b\\)', calpuff_inp) -> psst
+    grep('^Subgroup \\(13c\\)', calpuff_inp) -> psend
+    grep('!', calpuff_inp) %>% subset(. %in% psst:psend) -> psln
+    if(length(psln) > 0) calpuff_inp[-psln] -> calpuff_inp
     
-    grep('^Subgroup \\(20c\\)', calpuffInp) -> drheader
-    grep('!', calpuffInp) %>% subset(. > drheader) -> drln
-    if(length(drln) > 0) calpuffInp[-drln] -> calpuffInp
+    grep('^Subgroup \\(20c\\)', calpuff_inp) -> drheader
+    grep('!', calpuff_inp) %>% subset(. > drheader) -> drln
+    if(length(drln) > 0) calpuff_inp[-drln] -> calpuff_inp
     
-    setPuff(calpuffInp, params) -> calpuffInp
+    setPuff(calpuff_inp, params) -> calpuff_inp
     
     #write into file
     outinp <- file.path(output_dir, paste0(source.id,"_elevgen_CALPUFF_7.0.inp"))
-    writeLines(calpuffInp, outinp)  
+    writeLines(calpuff_inp, outinp)  
     
     org_dir <- getwd()
     # calpuff_dir <- dirname(calpuff_exe)
@@ -590,7 +590,7 @@ get_recep <- function(casecity,
 }
 
 
-make_toporows <- function(topoXYZ) {
+makeToporows <- function(topoXYZ) {
   paste0("Disc",1:nrow(topoXYZ),
          "  !  X = ",
          topoXYZ$Xkm,", ",
@@ -600,12 +600,12 @@ make_toporows <- function(topoXYZ) {
 }
 
 
-get_bgconcs = function(sources, mod_dir) {
+getBgconcs = function(sources, mod_dir) {
 
   sources %<>% spdf
   #retrieve concentrations from Asia nested runs
   #file names
-  bgFiles <- list("Max_8-hour_ozone" = "present_mda8.nc",
+  files_bg <- list("Max_8-hour_ozone" = "present_mda8.nc",
                   NH3 = "nested_nh3_present.2011.nc",
                   H2O_ = "nested_h2o2_present.2011.nc")
   scaling <- c(1, 1, 1) #source data is in ppb
@@ -622,9 +622,9 @@ get_bgconcs = function(sources, mod_dir) {
   concs <- list()
   avgconcs <- list()
   
-  for(i in 1:length(bgFiles)) {
-    nc_open(file.path(mod_dir, bgFiles[[i]])) -> nc
-    ncvar_get(nc, names(bgFiles)[i]) -> d
+  for(i in 1:length(files_bg)) {
+    nc_open(file.path(mod_dir, files_bg[[i]])) -> nc
+    ncvar_get(nc, names(files_bg)[i]) -> d
     aperm(d, c(2, 3, 1)) -> d
     datamonths = as.Date("2011-01-01") %>% 
       seq.Date(by="day",length.out = 365) %>% 
@@ -643,7 +643,7 @@ get_bgconcs = function(sources, mod_dir) {
       multiply_by(scaling[i]) %>% 
       round(3) %>% 
       apply(1, paste, collapse=", ") -> 
-      concs[[names(bgFiles)[i]]]
+      concs[[names(files_bg)[i]]]
   }
   
   #read data from global grid for locations outside Asia

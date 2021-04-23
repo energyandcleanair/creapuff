@@ -17,7 +17,7 @@
 #' @export
 #'
 #' @examples
-calmet.generate_input <- function(
+runCalmet <- function(
   input_xls,
   wrf_dir,
   expand_grids,

@@ -17,7 +17,7 @@
 #' @export
 #'
 #' @examples
-calpuff.generate_input <- function(
+runCalpuff <- function(
   run_name,
   input_xls,
   start_date, # Used to know which power plants are 'operating' or 'new'
@@ -45,7 +45,7 @@ calpuff.generate_input <- function(
   target_crs <- raster::crs(grids[[1]])
   
   # params_allgrids = readRDS(file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
-  params_allgrids %>% lapply(data.frame) %>% bind_rows(.id='gridName') %>% mutate(runName=run_name) %>% 
+  params_allgrids %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% mutate(run_name=run_name) %>% 
     mutate_at(c('DGRIDKM', 'XORIGKM', 'YORIGKM', 'NX', 'NY'), as.numeric) %>% 
     rename(UTMZ=IUTMZN,
            UTMH=UTMHEM,
@@ -56,10 +56,10 @@ calpuff.generate_input <- function(
            GridY=YORIGKM) %>% 
     mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
            EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
-           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> outFiles
+           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> files_out
   
-  outFiles$dir <- output_dir
-  if(!exists('outfiles_all')) outFiles -> outfiles_all
+  files_out$dir <- output_dir
+  if(!exists('files_out_all')) files_out -> files_out_all
   
   #create multiple .INP files for individual sources or source clusters
   calpuff_dir <- dirname(calpuff_exe)
@@ -82,9 +82,9 @@ calpuff.generate_input <- function(
   #  paste0('_', emis$Status_Simple) -> emis$scenario
   emis$scenario %>% nchar %>% max
   
-  #combine emissions data with outFiles
-  emis$runName <- outFiles$runName %>% unique
-  merge(emis, outFiles[, c('runName', 'UTMZ', 'UTMH')], all.x=T, all.y=F) %>% unique -> sources
+  #combine emissions data with files_out
+  emis$run_name <- files_out$run_name %>% unique
+  merge(emis, files_out[, c('run_name', 'UTMZ', 'UTMH')], all.x=T, all.y=F) %>% unique -> sources
   
   sources$Lat %<>% as.numeric()
   sources$Long %<>% as.numeric()
@@ -98,9 +98,9 @@ calpuff.generate_input <- function(
   #all plants have FGD -Lauri
   sources$FGD = T
   #Hg speciation in % -Lauri # LC, FGD flue gas desulfurization (FGD) systems
-  "FGD	HG0	RGM	Hgp
-  F	43.9	54	2.1
-  T	74.2	24	1.8" %>% textConnection %>% read.table(header=T) %>% 
+  "FGD  HG0 RGM Hgp
+  F 43.9  54  2.1
+  T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
     mutate_if(is.numeric, divide_by, 100) ->
     hg_species
   #rename columns to use default variable names -Lauri
@@ -128,18 +128,18 @@ calpuff.generate_input <- function(
     loc = outF %>% spdf %>% spTransform(target_crs)
     
     #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
-    get_recep(loc,
+    getRecep(loc,
               nesfactL=nesfactL,
               output_dir=output_dir,
               calpuff_exe=calpuff_exe,
               calpuff_template=calpuff_template,
-              outfiles_all=outfiles_all,
+              files_out_all=files_out_all,
               target_crs=target_crs) -> topoAll[[run]]
     
     print(run)
   }
   
-  bgconcs = get_bgconcs(sources,  mod_dir=file.path(gis_dir, "background"))
+  bgconcs = getBgconcs(sources,  mod_dir=file.path(gis_dir, "background"))
   
   o3dat = NULL #NULL : hourly Ozone Data File (Optional). No ozone monitoring stations, in both PH or Vietnam
   
@@ -151,18 +151,18 @@ calpuff.generate_input <- function(
   runsources_out=list()
   pm10fraction=list()
   
-  queue = sources$runName %>% unique
+  queue = sources$run_name %>% unique
   for(metrun in queue) {
-    sources %>% filter(runName == metrun) %>% spdf -> runsources
-    metfiles <- outfiles_all %>% filter(runName == unique(runsources$runName))
+    sources %>% filter(run_name == metrun) %>% spdf -> runsources
+    files_met <- files_out_all %>% filter(run_name == unique(runsources$run_name))
     
-    targetcrs = getUTMproj(metfiles$UTMZ[1], metfiles$UTMH[1])
+    targetcrs = getUTMproj(files_met$UTMZ[1], files_met$UTMH[1])
     runsources %<>% spTransform(targetcrs)
     runsources %>% coordinates() %>% data.frame() %>% 
       set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
     runsources$base.elevation..msl <- getPlantElev(runsources,
                                                    dir=output_dir,
-                                                   outFiles=metfiles)
+                                                   files_out=files_met)
     
     runsources@data %<>% mutate(SO2 = SO2_tpa,
                                 SO4 = 0,
@@ -215,7 +215,7 @@ calpuff.generate_input <- function(
       intopo$include[intopo$dist_to_source<nesfact_range[i] & intopo$nesfact==nesfactL[i]] <- T
     
     print(paste(metrun, sum(intopo$include), 'receptors'))
-    if(sum(intopo$include)+metfiles$GridNX[1]*metfiles$GridNY[1]>=10000) stop('too many receptors!')
+    if(sum(intopo$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
     
     plotadm = getadm(gis_dir, 0, 'coarse') %>% cropProj(r) # LC : #
     quickpng(file.path(output_dir, paste0(metrun, ' receptors.png'))  )   
@@ -228,14 +228,14 @@ calpuff.generate_input <- function(
     addparams = list(DATUM="WGS-84")
     
     for(puffrun in runsources$source.name) {
-      make_calpuff_inp(metfiles,
+      makeCalpuffInp(files_met,
                        calpuff_template=calpuff_template,
                        output_dir=output_dir,
                        puffrun=puffrun,
                        bgconcs = bgconcs[bgconcs$puffrun == puffrun,],
                        OZONE.DAT = o3dat,
                        sourceLines=sourceLines[[puffrun]],
-                       receptors=intopo %>% subset(include) %>% make_toporows,
+                       receptors=intopo %>% subset(include) %>% makeToporows,
                        addparams = addparams,
                        addsubgroups = NULL) ->
         inpfiles_created[[puffrun]]
@@ -261,7 +261,7 @@ calpuff.generate_input <- function(
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
   result$sources <- sources
-  result$outfiles_all <- outfiles_all
+  result$files_out_all <- files_out_all
   result$pm10fraction <- pm10fraction
   
   return(result)
