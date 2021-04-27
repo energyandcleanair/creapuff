@@ -629,8 +629,16 @@ getBgconcs = function(sources, mod_dir) {
     datamonths = as.Date("2011-01-01") %>% 
       seq.Date(by="day",length.out = 365) %>% 
       month %>% list
+    
+    # dim(d) = 121 133 365
     apply(d, c(1, 2), 
           function(x) aggregate(x, by=datamonths, mean)$x) -> d.m
+    
+    # dim(d.m) = 12 123 133
+    #CHECK HT: This is the line I had to add
+    aperm(d.m, c(2, 3, 1)) -> d.m
+    # dim(d.m) = 121 133  12
+    
     brick(d.m) -> r
     extent(r) <- extent(c(xmin-xres/2,
                           xmax+xres/2,

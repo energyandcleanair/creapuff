@@ -196,7 +196,7 @@ runPostprocessing <- function(
                  pu.bat)
       
       if(run_pu){
-        shell.exec(normalizePath(pu.bat))
+        system(sprintf('cmd /c "%s"',normalizePath(pu.bat)))
       }
       
       calpost.bat <- file.path(output_dir, paste0("calpost_", jobname, "_batch_", batch, ".bat"))
@@ -206,7 +206,7 @@ runPostprocessing <- function(
                  calpost.bat)
       
       if(run_calpost){
-        shell.exec(normalizePath(calpost.bat))
+        system(sprintf('cmd /c "%s"',normalizePath(calpost.bat)))
       }
     }
   }
