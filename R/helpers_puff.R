@@ -168,7 +168,7 @@ make_tifs <- function(calpuff_files,
         inF <- sapply(subsets, function(x) gsub(subsets[1],x,files[file]))
         
         #create interpolated raster
-        inF %>% lapply(readCALPOST) %>% do.call(rbind, .) -> poll
+        inF %>% lapply(read_calpost) %>% do.call(rbind, .) -> poll
         poll[, c(1:2, 2+rank.n)] -> poll
         colnames(poll) = c("Xkm","Ykm","conc")
         poll$conc <- calpuff_files[file,"scale"] * poll$conc
@@ -178,9 +178,9 @@ make_tifs <- function(calpuff_files,
                                          proj4string = CRS(proj4string(grids$gridSP)))
         pollSP %<>% crop(extent(grids$gridR)+30.1)
         
-        conc_krige <- idw(as.formula(paste0("conc"," ~ 1")),
+        conc_idw <- idw(as.formula(paste0("conc"," ~ 1")),
                           pollSP, grids$gridSP, nmax=nmax, idp=idp, ...)
-        conc_R <- raster(conc_krige,values=T)
+        conc_R <- raster(conc_idw,values=T)
         conc_R %<>% crop(grids$gridR)
         
         writeRaster(conc_R, rfile, format="GTiff",overwrite=T)
@@ -895,3 +895,19 @@ getBgconcs = function(sources, mod_dir) {
     ldply(.id='spec') %>% 
     spread(spec, str)
 }
+
+
+#' Title
+#'
+#' @param csvfile
+#'
+#' @return
+#' @export
+#'
+#' @examples
+read_calpost = function(csvfile) {
+  readLines(csvfile, n=10) -> inlines
+  startline = inlines %>% gsub(" ", "", .) %>% nchar %>% equals(0) %>% which %>% '['(2)
+  read.table(csvfile, skip=startline,header=F,sep=",")
+}
+
