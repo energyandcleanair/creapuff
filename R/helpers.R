@@ -1,27 +1,39 @@
 sel <- dplyr::select
 
-getUTMproj <- function(zone=NULL,hem=NULL,loc=NULL,units="km") {
+
+get_ll <- function(loc){
+  loc <- creahelpers::to_spdf(loc)
+  if(grepl("Spatial", class(loc))) {
+    if(proj4string(loc) != creapuff.env$llproj) loc <- spTransform(loc, CRS(creapuff.env$llproj))
+    ll <- colMeans(coordinates(loc))
+  }
+  return(unname(ll))
+}
+
+get_utm_hem <- function(loc){
+  ll <- get_ll(loc)
+  ifelse(ll[2]<0, "s", "n")
+}
+
+get_utm_zone <- function(loc){
+  ll <- get_ll(loc)
+  return(floor((ll[1] + 180)/6) %% 60 + 1)
+}
+
+
+getUTMproj <- function(zone=NULL, hem=NULL, loc=NULL, units="km") {
   
   if(!is.null(loc) & (!is.null(zone) | !is.null(hem)))
     warning("using explicit zone / hemisphere settings to override coordinate input")
   
-  if(!is.null(loc) & grepl("Spatial",class(loc))) {
-    require(sp)
-    if(proj4string(loc) != creapuff.env$llproj) loc <- spTransform(loc, CRS(creapuff.env$llproj))
-    ll <- colMeans(coordinates(loc))
+  if(!is.null(loc) & is.null(zone)){
+    zone <- get_utm_zone(loc)
+  } 
+  
+  if(is.null(hem)){
+    hem <- get_utm_hem(loc)
   }
-  
-  if(!is.null(loc) & !grepl("Spatial",class(loc))) {
-    warning("numeric location input - assuming lon-lat coordinate system")
-    ll <- loc
-  }
-  
-  if(is.null(zone))
-    zone <- floor((ll[1] + 180)/6) %% 60 + 1
-  
-  if(is.null(hem)) {
-    southhemi <- ll[2] < 0
-  } else southhemi <- tolower(substr(hem,1,1)) == "s"
+  southhemi <- tolower(substr(hem,1,1)) == "s"
   
   paste0("+proj=utm +datum=WGS84 +no_defs +zone=",zone,ifelse(southhemi," +south ","")," +units=",units)
 }

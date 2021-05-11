@@ -13,8 +13,13 @@
 #' @examples
 get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
   
-  ext<-gsub("^\\.","\\\\.",ext)
+  ext <- gsub("^\\.","\\\\.",ext)
   files <- list.files(path=dir, pattern=paste0("rank.*",ext), full.names = T)
+  
+  if(length(files)==0){
+    stop("Couldn't find calpuff files (", ext, ") in ", dir)
+  }
+  
   calpuff_files <- data.frame(path = files, name=basename(files), scale = 1,
                               stringsAsFactors = F) %>%
     separate(name,c("X1","species","hr","type","scenario"), "_") %>% sel(-X1) -> calpuff_files
@@ -81,7 +86,8 @@ get_grids_calpuff <- function(calpuff_files,
   
   if(is.null(filepath))
     filepath <- calpuff_files[calpuff_files$species=="pm25" &
-                                calpuff_files$hr >24 &
+                                # calpuff_files$hr>24 & # This didn't work with Vietnam, replaced with the line below
+                                !str_detect(calpuff_files$path,"\\(all\\)") &
                                 calpuff_files$scenario %in% runName, "path"][1]
   
   poll <- read.table(filepath,
@@ -101,10 +107,8 @@ get_grids_calpuff <- function(calpuff_files,
   gridSP <- as(r, 'SpatialPixels') #CHECK We removed global variable
   gridR <- raster(gridSP)
   
-  
   gridLL <- projectRaster(gridR, crs = proj4string(rworldmap::countriesLow))
   gridLL <- extend(gridLL, c(40,40))
-  
   
   return(list("gridR"=gridR,
               "gridSP"=gridSP,

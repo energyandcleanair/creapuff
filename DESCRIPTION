@@ -12,12 +12,10 @@ License: TBC
 Encoding: UTF-8
 LazyData: true
 Imports:
+    tidyverse,
     readxl,
     magrittr,
     plyr,
-    tidyr,
-    dplyr,
-    reshape2,
     data.table,
     lubridate,
     zoo,
@@ -32,7 +30,8 @@ Imports:
     ggspatial,
     DescTools,
     elevatr,
-    pbapply
+    pbapply,
+    plotKML
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers

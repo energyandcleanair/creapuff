@@ -66,12 +66,15 @@ importFrom(plyr,ldply)
 importFrom(raster,"crs<-")
 importFrom(raster,aggregate)
 importFrom(raster,crs)
-importFrom(raster,extent)
 importFrom(raster,extend)
+importFrom(raster,extent)
 importFrom(raster,raster)
 importFrom(raster,rasterize)
 importFrom(raster,resample)
 importFrom(raster,values)
+importFrom(raster,projectExtent)
+importFrom(raster,projectRaster)
+
 importFrom(rasterVis,levelplot)
 
 importFrom(readxl,read_xlsx)
@@ -86,3 +89,9 @@ importFrom(sp,proj4string)
 
 importFrom(tidyr,gather)
 importFrom(tidyr,spread)
+importFrom(tidyr,separate)
+
+importFrom(stringr,str_detect)
+
+importFrom(zoo,na.approx)
+importFrom(zoo,na.fill)
