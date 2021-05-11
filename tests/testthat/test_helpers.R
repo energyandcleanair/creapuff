@@ -42,6 +42,9 @@ test_that("make_tifs works", {
     # Remove preexisting tif files
     tif_files <- list.files(example_dir, ".tif", full.names = T)
     file.remove(tif_files)
+    tif_files <- list.files(example_dir, ".tif", full.names = T)
+    expect_equal(length(tif_files), 0) # Just to confirm...
+    
     
     # Get list of files
     calpuff_files <- creapuff::get_calpuff_files(dir=example_dir)
@@ -61,6 +64,10 @@ test_that("make_tifs works", {
     
     # Make tifs
     creapuff::make_tifs(calpuff_files=calpuff_files, grids=grids)
+    
+    # Check that they have been created
+    tif_files <- list.files(example_dir, ".tif", full.names = T)
+    expect_equal(nrow(calpuff_files), length(tif_files))
   }
 })
 
