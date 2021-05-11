@@ -34,12 +34,14 @@ Imports:
     elevatr,
     pbapply
 Remotes:
-    rich-iannone/PuffR
+    rich-iannone/PuffR,
+    energyandcleanair/creahelpers
 Depends:
     raster,
     sp,
     ncdf4,
-    ggplot2
+    ggplot2,
+    creahelpers
 Suggests: 
     testthat(>= 2.1.0),
 VignetteBuilder:

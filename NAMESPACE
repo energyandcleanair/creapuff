@@ -5,6 +5,10 @@ export("%>%")
 export(runCalmet)
 export(runCalpuff)
 export(runPostprocessing)
+
+exportPattern("^[[:alpha:]]|\\%+") # some helper functions can be used when doing hia
+
+
 importFrom(RColorBrewer,brewer.pal)
 importFrom(dplyr,all_vars)
 importFrom(dplyr,any_vars)

@@ -1,3 +1,203 @@
+
+
+#' Build concentration (additional) dataset from CALPUF results
+#'
+#' @param ext
+#' @param gasunit are gas concentrations desired in ug or ppb (CALPOST outputs are assumed to be in ug/m3)
+#' @param utm_hem 'N' or 'S'
+#' @param map_res in kilometers
+#'
+#' @return
+#' @export
+#'
+#' @examples
+get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
+  
+  ext<-gsub("^\\.","\\\\.",ext)
+  files <- list.files(path=dir, pattern=paste0("rank.*",ext), full.names = T)
+  calpuff_files <- data.frame(path = files, name=basename(files), scale = 1,
+                              stringsAsFactors = F) %>%
+    separate(name,c("X1","species","hr","type","scenario"), "_") %>% sel(-X1) -> calpuff_files
+  calpuff_files$type[calpuff_files$type=="conc"] <- "concentration"
+  calpuff_files$unit <- "ug/m3"
+  calpuff_files[grep("tflx",calpuff_files$name),"type"] <- "deposition"
+  calpuff_files[grep("tflx",calpuff_files$name),"scale"] <- 8760*3600/1e9*1e4
+  calpuff_files[grep("tflx",calpuff_files$name),"unit"] <- "kg/ha/yr"
+  
+  calpuff_files[calpuff_files$species == 'hg','scale'] <- calpuff_files[calpuff_files$species == 'hg','scale'] * 1e3
+  calpuff_files[calpuff_files$species == 'hg','unit'] <- "mg/ha/yr"
+  
+  calpuff_files$hr <- as.numeric(gsub("[_hr]","",calpuff_files$hr))
+  calpuff_files$FUN <- "mean"
+  calpuff_files[calpuff_files$hr<=24,"FUN"] <- "max"
+  calpuff_files$scenario <- gsub(ext,"",calpuff_files$scenario)
+  
+  calpuff_files$period <- NA
+  calpuff_files[calpuff_files$hr ==1,"period"] <- "hourly"
+  calpuff_files[calpuff_files$hr ==24,"period"] <- "daily"
+  calpuff_files[calpuff_files$hr > 7000,"period"] <- "annual"
+  
+  calpuff_files$speciesName <- toupper(calpuff_files$species)
+  calpuff_files[calpuff_files$species == "so2eq","speciesName"] <- "acid"
+  calpuff_files[calpuff_files$species == "pm25","speciesName"] <- "PM2.5"
+  calpuff_files[calpuff_files$species == "tpm10","speciesName"] <- "PM10"
+  calpuff_files[calpuff_files$species == "so2eq","unit"] <- paste0(calpuff_files[calpuff_files$species == "so2eq","unit"]," SO2-equivalent")
+  calpuff_files[calpuff_files$species == "pm","speciesName"] <- "fly ash"
+  calpuff_files[calpuff_files$species == "hg","speciesName"] <- "mercury"
+  
+  #scaling for non-standard units
+  calpuff_files$plotscale <- 1
+  calpuff_files$plotunit <- calpuff_files$unit
+  
+  if(gasunit=='ppb') {
+    calpuff_files[calpuff_files$speciesName=="SO2","plotscale"] <- 0.355
+    calpuff_files[calpuff_files$speciesName=="NO2","plotscale"] <- 0.494
+    calpuff_files[calpuff_files$speciesName=="SO2","plotunit"] <- 'ppb'
+    calpuff_files[calpuff_files$speciesName=="NO2","plotunit"] <- 'ppb'
+  }
+  
+  #exceedance thresholds - these will be recorded and included as a threshold level in contour plots
+  calpuff_files$threshold <- NA
+  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==24,"threshold"] <- 20 #WHO
+  calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"] <- 200 #WHO
+  calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"] <- 25 #WHO
+  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"] <- 50 #WHO
+  calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 #Great lakes study
+  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==1,"threshold"] <- 75/0.355 #U.S. NAAQS
+  calpuff_files$threshold.plotunit <- calpuff_files$threshold * calpuff_files$plotscale
+  
+  return(calpuff_files)
+}
+
+
+get_grids_calpuff <- function(calpuff_files,
+                              runName=NULL,
+                              utm_zone=get('utm_zone', envir=.GlobalEnv),
+                              utm_hem=get('utm_hem', envir=.GlobalEnv),
+                              map_res=get('map_res', envir=.GlobalEnv),
+                              filepath=NULL) {
+  
+  if(is.null(runName)) runName <- calpuff_files[1,'scenario']
+  
+  if(is.null(filepath))
+    filepath <- calpuff_files[calpuff_files$species=="pm25" &
+                                calpuff_files$hr >24 &
+                                calpuff_files$scenario %in% runName, "path"][1]
+  
+  poll <- read.table(filepath,
+                     skip=7,header=F,col.names=c("Xkm","Ykm","PM25"), sep=",")
+  
+  pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
+                                   data = subset(poll,select=-c(Xkm,Ykm)),
+                                   proj4string = CRS(paste0("+proj=utm +zone=",utm_zone,
+                                                            ifelse(utm_hem=="S"," +south",""),
+                                                            " +datum=WGS84 +units=km +no_defs")))
+  domain <- extent(pollSP)
+  res <- (domain@xmax - domain@xmin)/49
+  domain <- extend(domain,res/2)
+  
+  r <- raster(domain, resolution=map_res, crs=crs(pollSP))
+  
+  gridSP <- as(r, 'SpatialPixels') #CHECK We removed global variable
+  gridR <- raster(gridSP)
+  
+  
+  gridLL <- projectRaster(gridR, crs = proj4string(rworldmap::countriesLow))
+  gridLL <- extend(gridLL, c(40,40))
+  
+  
+  return(list("gridR"=gridR,
+              "gridSP"=gridSP,
+              "gridLL"=gridLL))
+}
+
+
+
+
+#' Title
+#'
+#' @param calpuff_files
+#' @param grids
+#' @param ext
+#' @param queue
+#' @param subsets
+#' @param max.ranks
+#' @param overwrite
+#' @param nmax
+#' @param idp
+#' @param ...
+#'
+#' @return
+#' @export
+#'
+#' @examples
+make_tifs <- function(calpuff_files,
+                      grids,
+                      ext='',
+                      queue=NULL,
+                      subsets = F,
+                      max.ranks = 1,
+                      overwrite=F,
+                      nmax=8, idp=1.5, ...) {
+  
+  if(is.null(queue)) queue = 1:nrow(calpuff_files)
+  
+  files = calpuff_files$path
+  
+  if(subsets %>% typeof == "logical") {
+    if(subsets) { subsets <- c('_g','_d')
+    } else subsets <- ''
+  }
+  
+  queue <- queue[queue %in% grep(subsets[1], calpuff_files$path)]
+  
+  for(file in queue) {
+    ranks <- 1
+    if(grepl('rank\\(all)', files[file])) ranks <- max.ranks
+    for(rank.n in 1:ranks) {
+      files[file] %>% gsub("\\.csv",paste0(ext, ".tif"),.) %>%
+        gsub(subsets[1],"",.) %>%
+        gsub('rank\\(all)', paste0('rank(',rank.n,')'), .) -> rfile
+      
+      if(file.exists(rfile)) message('tif file exists: ', rfile, ifelse(overwrite, ". [OVERWRITING]", ". [IGNORING]"))
+      if(!file.exists(rfile) | overwrite) {
+        inF <- sapply(subsets, function(x) gsub(subsets[1],x,files[file]))
+        
+        #create interpolated raster
+        inF %>% lapply(readCALPOST) %>% do.call(rbind, .) -> poll
+        poll[, c(1:2, 2+rank.n)] -> poll
+        colnames(poll) = c("Xkm","Ykm","conc")
+        poll$conc <- calpuff_files[file,"scale"] * poll$conc
+        
+        pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
+                                         data = subset(poll,select=-c(Xkm,Ykm)),
+                                         proj4string = CRS(proj4string(grids$gridSP)))
+        pollSP %<>% crop(extent(grids$gridR)+30.1)
+        
+        conc_krige <- idw(as.formula(paste0("conc"," ~ 1")),
+                          pollSP, grids$gridSP, nmax=nmax, idp=idp, ...)
+        conc_R <- raster(conc_krige,values=T)
+        conc_R %<>% crop(grids$gridR)
+        
+        writeRaster(conc_R, rfile, format="GTiff",overwrite=T)
+        raster::plot(conc_R, main=basename(rfile))
+        print(paste(files[file],'processed'))
+      }
+    }
+  }
+}
+
+get_conc_raster <- function(calpuff_files, scenario, species, period='annual') {
+  calpuff_files %>% filter(scenario==!!scenario &
+                             species==!!species &
+                             period==!!period) %>%
+    pull(path) %>%
+    gsub("\\.csv","\\.tif",.) %>%
+    raster() %>%
+    creahelpers::fixproj()
+}
+
+
 #read coords and timezones from .def files
 readDef = function(files_def) {
   cbind(files_def,Lat=NA,Lon=NA,TZ=NA,GridNX=NA,GridNY=NA,
@@ -586,7 +786,7 @@ getRecep <- function(casecity,
       file.path(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
         mutate(nesfact=nf)
-    }) %>% bind_rows %>% spdf(crs=target_crs)
+    }) %>% bind_rows %>% to_spdf(crs=target_crs)
 }
 
 
@@ -602,7 +802,7 @@ makeToporows <- function(topoXYZ) {
 
 getBgconcs = function(sources, mod_dir) {
 
-  sources %<>% spdf
+  sources %<>% to_spdf
   #retrieve concentrations from Asia nested runs
   #file names
   files_bg <- list("Max_8-hour_ozone" = "present_mda8.nc",

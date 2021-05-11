@@ -85,7 +85,7 @@ runCalmet <- function(
                 })
   
   #center of domain
-  domain_center <- m3d_grid %>% bind_rows() %>% summarise_all(mean) %>% spdf
+  domain_center <- m3d_grid %>% bind_rows() %>% summarise_all(mean) %>% to_spdf
   
   #determine coordinate system to use
   target_crs <- getUTMproj(loc=domain_center)
@@ -105,7 +105,7 @@ runCalmet <- function(
     res = m3d$d[m3d$grid_name==grid_name]
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
                          res/100, 0)
-    m3d_grid[[g]] %>% spdf %>% extent() %>% add(expand_degs) %>% 
+    m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
       as('SpatialPolygons') -> lldomain # Non-skewed domain, in the original ll rcs
     crs(lldomain) <- creapuff.env$llproj
     lldomain %>% spTransform(target_crs) -> lldomain_utm # LC : Skewed domain, in the UTM crs
@@ -133,11 +133,11 @@ runCalmet <- function(
   domPols = gridsToDomPols(grids, target_crs)
   
   #admin boundaries for plotting
-  getadm(gis_dir=gis_dir, level=0, res='low') %>% cropProj(domPols) -> admUTM
+  get_adm(level=0, res='low') %>% cropProj(domPols) -> admUTM
   
   #plot sources and domains
   read_xlsx(input_xls, sheet='CALPUFF input') %>% 
-    mutate_at(c('Lat', 'Long'), as.numeric) %>% spdf -> sources
+    mutate_at(c('Lat', 'Long'), as.numeric) %>% to_spdf -> sources
   
   ggplot() + annotation_spatial(admUTM) + layer_spatial(domPols, fill=NA) +
     theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 

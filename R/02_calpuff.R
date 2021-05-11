@@ -91,7 +91,7 @@ runCalpuff <- function(
   
   #exclude sources outside domain  -Lauri
   domPols = gridsToDomPols(grids, target_crs)
-  sources %<>% spdf %>% crop(spTransform(domPols, crs(.))) %>% '@'('data')
+  sources %<>% to_spdf %>% crop(spTransform(domPols, crs(.))) %>% '@'('data')
   
   sources$source.name <- sources$scenario # LC
   sources$puffrun <- sources$scenario
@@ -125,7 +125,7 @@ runCalpuff <- function(
     
     target_crs = getUTMproj(outF$UTMZ, outF$UTMH)
     
-    loc = outF %>% spdf %>% spTransform(target_crs)
+    loc = outF %>% to_spdf %>% spTransform(target_crs)
     
     #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
     getRecep(loc,
@@ -153,7 +153,7 @@ runCalpuff <- function(
   
   queue = sources$run_name %>% unique
   for(metrun in queue) {
-    sources %>% filter(run_name == metrun) %>% spdf -> runsources
+    sources %>% filter(run_name == metrun) %>% to_spdf -> runsources
     files_met <- out_files_all %>% filter(run_name == unique(runsources$run_name))
     
     targetcrs = getUTMproj(files_met$UTMZ[1], files_met$UTMH[1])
