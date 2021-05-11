@@ -102,7 +102,7 @@ runCalmet <- function(
   grids = list()
   for(g in seq_along(m3d_grid)) {
     grid_name = names(m3d_grid)[g]
-    res = m3d$d[m3d$grid_name==grid_name]
+    res = m3d$d[m3d$grid_name==grid_name][1]
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
                          res/100, 0)
     m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
