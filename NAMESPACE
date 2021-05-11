@@ -5,11 +5,10 @@ export("%>%")
 export(runCalmet)
 export(runCalpuff)
 export(runPostprocessing)
-
 exportPattern("^[[:alpha:]]|\\%+") # some helper functions can be used when doing hia
 
-
 importFrom(RColorBrewer,brewer.pal)
+
 importFrom(dplyr,all_vars)
 importFrom(dplyr,any_vars)
 importFrom(dplyr,arrange)
@@ -38,8 +37,10 @@ importFrom(dplyr,summarise_all)
 importFrom(dplyr,tibble)
 importFrom(dplyr,ungroup)
 importFrom(dplyr,vars)
+
 importFrom(ggspatial,annotation_spatial)
 importFrom(ggspatial,layer_spatial)
+
 importFrom(lubridate,"hour<-")
 importFrom(lubridate,day)
 importFrom(lubridate,hour)
@@ -47,6 +48,7 @@ importFrom(lubridate,month)
 importFrom(lubridate,year)
 importFrom(lubridate,ymd)
 importFrom(lubridate,ymd_h)
+
 importFrom(magrittr,"%<>%")
 importFrom(magrittr,"%>%")
 importFrom(magrittr,add)
@@ -55,24 +57,32 @@ importFrom(magrittr,multiply_by)
 importFrom(magrittr,set_names)
 importFrom(magrittr,subtract)
 importFrom(magrittr,use_series)
+
 importFrom(plyr,.)
 importFrom(plyr,ddply)
 importFrom(plyr,dlply)
 importFrom(plyr,ldply)
+
 importFrom(raster,"crs<-")
 importFrom(raster,aggregate)
 importFrom(raster,crs)
 importFrom(raster,extent)
+importFrom(raster,extend)
 importFrom(raster,raster)
 importFrom(raster,rasterize)
 importFrom(raster,resample)
 importFrom(raster,values)
 importFrom(rasterVis,levelplot)
+
 importFrom(readxl,read_xlsx)
+
 importFrom(rgeos,gContains)
+
 importFrom(sp,CRS)
 importFrom(sp,SpatialPointsDataFrame)
 importFrom(sp,coordinates)
 importFrom(sp,spTransform)
+importFrom(sp,proj4string)
+
 importFrom(tidyr,gather)
 importFrom(tidyr,spread)
