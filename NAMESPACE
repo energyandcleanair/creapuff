@@ -77,18 +77,30 @@ importFrom(raster,resample)
 importFrom(raster,values)
 importFrom(raster,projectExtent)
 importFrom(raster,projectRaster)
+importFrom(raster,as.matrix)
+importFrom(raster,cut)
 
 importFrom(rasterVis,levelplot)
+importFrom(rasterVis,rasterTheme)
+
+importFrom(latticeExtra,layer)
 
 importFrom(readxl,read_xlsx)
 
 importFrom(rgeos,gContains)
+importFrom(rgeos,gBuffer)
+importFrom(rgeos,gDifference)
+importFrom(rgeos,gUnaryUnion)
 
 importFrom(sp,CRS)
 importFrom(sp,SpatialPointsDataFrame)
+importFrom(sp,SpatialPolygonsDataFrame)
+importFrom(sp,Polygons)
+importFrom(sp,SpatialPolygons)
 importFrom(sp,coordinates)
 importFrom(sp,spTransform)
 importFrom(sp,proj4string)
+importFrom(sp,sp.text)
 
 importFrom(tidyr,gather)
 importFrom(tidyr,spread)

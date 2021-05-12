@@ -22,7 +22,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
   
   calpuff_files <- data.frame(path = files, name=basename(files), scale = 1,
                               stringsAsFactors = F) %>%
-    separate(name,c("X1","species","hr","type","scenario"), "_") %>% sel(-X1) -> calpuff_files
+    separate(name,c("X1","species","hr","type","scenario"), "_", remove=F) %>% sel(-X1)
   calpuff_files$type[calpuff_files$type=="conc"] <- "concentration"
   calpuff_files$unit <- "ug/m3"
   calpuff_files[grep("tflx",calpuff_files$name),"type"] <- "deposition"

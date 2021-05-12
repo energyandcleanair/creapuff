@@ -72,3 +72,53 @@ test_that("make_tifs works", {
 })
 
 
+
+test_that("plotting works", {
+  
+  expect_true(dir.exists(test_data_dir()))
+  
+  for(example_dir in list.dirs(test_data_dir(), recursive = F)){
+    print(example_dir)
+    
+    # Get list of files
+    calpuff_files <- creapuff::get_calpuff_files(dir=example_dir)
+    
+    # Get UTM information from plants
+    plants <- read.csv(file.path(example_dir, "plants.csv"))
+    utm_zone <- get_utm_zone(plants)
+    utm_hem <- get_utm_hem(plants)
+    
+    # Get grids
+    grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files,
+                                         utm_zone=utm_zone,
+                                         utm_hem=utm_hem,
+                                         map_res=10)
+    
+    # Make tifs
+    creapuff::make_tifs(calpuff_files=calpuff_files, grids=grids)
+    
+    # Plot - PNG
+    png_files <- list.files(example_dir, ".png", full.names = T)
+    file.remove(png_files)
+    creapuff::plot_results(dir=example_dir, plants=plants, outputs="png")
+    png_files <- list.files(example_dir, ".png", full.names = T)
+    expect_gt(length(png_files), 0)
+    
+    # Plot - KMZ
+    kmz_files <- list.files(example_dir, ".kmz", full.names = T)
+    file.remove(kmz_files)
+    creapuff::plot_results(dir=example_dir, plants=plants, outputs="kml")
+    kmz_files <- list.files(example_dir, ".kmz", full.names = T)
+    expect_gt(length(kmz_files), 0)
+    
+    # Plot - exPop
+    png_files <- list.files(example_dir, ".png", full.names = T)
+    file.remove(png_files)
+    creapuff::plot_results(dir=example_dir, plants=plants, outputs="expPop")
+    png_files <- list.files(example_dir, ".png", full.names = T)
+    expect_gt(length(png_files), 0)
+    
+  }
+})
+
+

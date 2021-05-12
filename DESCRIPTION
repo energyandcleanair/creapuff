@@ -23,6 +23,7 @@ Imports:
     RColorBrewer,
     rgeos,
     rasterVis,
+    latticeExtra,
     rworldmap,
     sf,
     geosphere,
@@ -31,6 +32,7 @@ Imports:
     DescTools,
     elevatr,
     pbapply,
+    maptools,
     plotKML
 Remotes:
     rich-iannone/PuffR,
