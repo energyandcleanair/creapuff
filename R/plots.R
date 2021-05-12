@@ -4,7 +4,6 @@
 #' @param plants_file
 #' @param outputs
 #' @param dir 
-#' @param results_folder 
 #' @param map_res in kilometers
 #' @param utm_zone 
 #' @param utm_hem 
@@ -14,7 +13,6 @@
 #'
 #' @examples
 plot_results <- function(dir,
-                         results_folder,
                          map_res=10,
                          utm_zone=NULL,
                          utm_hem=NULL,
