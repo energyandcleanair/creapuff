@@ -210,7 +210,7 @@ plot_results <- function(dir,
                                                              area=area(contP_UTM))
         
         if("kml" %in% outputs) {
-          spTransform(contP_UTM,CRS(proj4string(grids$gridLL))) -> contP
+          contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
           outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),fn.ext)
           
           colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
@@ -236,12 +236,17 @@ plot_results <- function(dir,
           
           kml_file <- file.path(dir, paste0(outL,".kml"))
           kmz_file <- file.path(dir, paste0(outL,".kmz"))
+          colour <- rank(contP@data$max)
           kml_open(kml_file)
-          kml_layer(obj=contP, subfolder.name=calpuff_files[file,"unit"],
-                    colour=rank(contP@data$max),
+          kml_layer(obj=contP,
+                    subfolder.name=calpuff_files[file,"unit"],
+                    # colour=colour, # TODO NOT SURE WHY IT DOESN'T WORK
                     colour_scale=yorb,
-                    alpha=0.5,altitude=0,plot.labpt=F,
-                    labels=level,LabelScale=0.5)
+                    alpha=0.5,
+                    altitude=0,
+                    plot.labpt=F,
+                    labels=level,
+                    LabelScale=0.5)
           
           kml_layer(obj=plants_plot, subfolder.name="Modeled sources",
                     size=1,

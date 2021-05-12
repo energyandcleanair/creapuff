@@ -32,8 +32,7 @@ Imports:
     DescTools,
     elevatr,
     pbapply,
-    maptools,
-    plotKML
+    maptools
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
@@ -42,7 +41,8 @@ Depends:
     sp,
     ncdf4,
     ggplot2,
-    creahelpers
+    creahelpers,
+    plotKML
 Suggests: 
     testthat(>= 2.1.0),
 VignetteBuilder:
