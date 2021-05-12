@@ -80,7 +80,8 @@ plot_results <- function(dir,
                                   calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
                                   "\nfrom ",calpuff_files[["scenarioName"]])
   
-  queue=which(calpuff_files$type=='concentration' & (calpuff_files$period == 'annual' |  !is.na(calpuff_files$threshold)))  #1:nrow(calpuff_files) #which(calpuff_files$scenario=='ppmine') #
+  queue=which(calpuff_files$type=='concentration' &
+                (calpuff_files$period == 'annual' | !is.na(calpuff_files$threshold)))  #1:nrow(calpuff_files) #which(calpuff_files$scenario=='ppmine') #
   test=F
   fn.ext <- "" #add an extension to end of filenames to avoid overwriting
   
@@ -240,7 +241,7 @@ plot_results <- function(dir,
           kml_open(kml_file)
           kml_layer(obj=contP,
                     subfolder.name=calpuff_files[file,"unit"],
-                    # colour=colour, # TODO NOT SURE WHY IT DOESN'T WORK
+                    # colour=colour, #TODO NOT SURE WHY IT DOESN'T WORK
                     colour_scale=yorb,
                     alpha=0.5,
                     altitude=0,
@@ -275,10 +276,10 @@ plot_results <- function(dir,
     expPop2 %>% filter(min >= threshold) %>% group_by(name, titletxt, threshold) %>%
       summarise_at(c('pop', 'area'), sum, na.rm=T) -> pop_exceed
     
-    write_csv(expPop2, paste0("expPop_new_format",fn.ext,".csv"))
-    write_csv(pop_exceed, paste0("threshold_exceedances",fn.ext,".csv"))
+    write_csv(expPop2, file.path(dir, paste0("expPop_new_format",fn.ext,".csv")))
+    write_csv(pop_exceed, file.path(dir, paste0("threshold_exceedances",fn.ext,".csv")))
     
-    outF <- file(file.path(dir, paste0("expPop",fn.ext,".csv"),"w"))
+    outF <- file(file.path(dir, paste0("expPop",fn.ext,".csv")),"w")
     # names(expPop) <- gsub("\n"," ",calpuff_files[queue,"titletxt"])
     for(n in names(expPop)) {
       writeLines(n,outF)

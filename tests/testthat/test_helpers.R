@@ -75,6 +75,9 @@ test_that("make_tifs works", {
 
 test_that("plotting works", {
   
+  gis_dir = "/Volumes/ext1/gis/"
+  readRenviron("../.Renviron")
+  
   expect_true(dir.exists(test_data_dir()))
   
   for(example_dir in list.dirs(test_data_dir(), recursive = F)){

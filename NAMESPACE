@@ -32,6 +32,7 @@ importFrom(dplyr,rowwise)
 importFrom(dplyr,select)
 importFrom(dplyr,summarise)
 importFrom(dplyr,summarise_all)
+importFrom(dplyr,summarise_at)
 importFrom(dplyr,tibble)
 importFrom(dplyr,ungroup)
 importFrom(dplyr,vars)
@@ -89,6 +90,9 @@ importFrom(rasterVis,rasterTheme)
 importFrom(latticeExtra,layer)
 
 importFrom(readxl,read_xlsx)
+
+importFrom(readr, read_csv)
+importFrom(readr, write_csv)
 
 importFrom(rgeos,gContains)
 importFrom(rgeos,gBuffer)
