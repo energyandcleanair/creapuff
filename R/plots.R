@@ -6,7 +6,7 @@ get_cities = function(plot_bb, grids, n=8, additional_city_regex='$^') {
   
   cities$ID = 1:nrow(cities)
   cities %>% raster::crop(plot_bb * .8) -> cityPlot
-  cityPlot$ID[c(order(-sp$dstTLrg)[1:n], grep(additional_city_regex, sp$name))] %>% unique -> plot_cities
+  cityPlot$ID[c(order(-cityPlot$dstTLrg)[1:n], grep(additional_city_regex, cityPlot$name))] %>% unique -> plot_cities
 
   cities$plot = cities$ID %in% plot_cities
   cities$pos = ifelse(cities@coords[, 1] < plot_bb@xmin + (plot_bb@xmax - plot_bb@xmin) * 1/3, 4, 2)
@@ -34,7 +34,7 @@ make_titletxt = function(calpuff_files) {
 #'
 #' @examples
 plot_results <- function(calpuff_files,
-                         dir=getwd(),
+                         dir=dirname(calpuff_files$path[1]),
                          map_res=1,
                          plants=NULL,
                          plant_names=NULL,
@@ -42,8 +42,9 @@ plot_results <- function(calpuff_files,
                          plot_km=400,
                          plot_bb=NULL,
                          cities=NULL,
-                         queue=T,
-                         test=F,
+                         colorkeybasis=NULL,
+                         queue=seq_along(calpuff_files$path),
+                         filename_suffix="",
                          outputs=c("png", "kml", "expPop", "cityconcs")){
   
   if(is.null(plant_names) & !is.null(plants)) plants$Source <- plant_names
@@ -76,8 +77,6 @@ plot_results <- function(calpuff_files,
   if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
   
   #set max value shown in graphs for each variable
-  colorkeybasis <- calpuff_files$scenario[1] #"opr_all"  #'matar1' #set NULL to set colorkey separately for each scenario
-  
   
   if(is.null(calpuff_files$k)) calpuff_files$k <- NA
   
@@ -108,10 +107,10 @@ plot_results <- function(calpuff_files,
   
   
   #output maps
-  for(file in queue[ifelse(test,1,T)]) {
+  for(file in queue) {
     rfile <- files[file]
     if(file.exists(rfile)){
-      raster(rfile) %>% #crop(plot_bb) %>%
+      raster(rfile) %>% 
         disaggregate(2, method='bilinear') -> conc_R
       max(values(conc_R)) -> maxVal
       
@@ -144,6 +143,7 @@ plot_results <- function(calpuff_files,
         al <- seq(0,k,sigfloor(k/5))
         axislabels = list(at=al,labels=al)
         
+        require(rasterVis)
         parSets = rasterTheme(region=colRamp)
         parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
         parSets$layout.widths$ylab.right = 2
@@ -153,7 +153,7 @@ plot_results <- function(calpuff_files,
         parSets$axis.line=list(lwd=3)
         parSets$panel.background$col <- colRamp[length(colRamp)]
         
-        outpng <- gsub("\\.csv|\\.tif",paste0("_levelplot",fn.ext,".png"),files[file])
+        outpng <- gsub("\\.csv|\\.tif",paste0("_levelplot",filename_suffix,".png"),files[file])
         png(filename =  outpng,
             width = 3000, height = 2000, units = "px",
             bg = "white",res=200)
@@ -202,7 +202,7 @@ plot_results <- function(calpuff_files,
         
         if("kml" %in% outputs) {
           contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
-          outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),fn.ext)
+          outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
           
           colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
           
@@ -213,7 +213,7 @@ plot_results <- function(calpuff_files,
             log10 %>% -. %>% ceiling %>% max(0)
           legendlvls <- round(lvls, decimals)
           
-          leg.title <- paste0(gsub(fn.ext, "", outL),
+          leg.title <- paste0(gsub(filename_suffix, "", outL),
                               " (", calpuff_files[file,"unit"], ")")
           
           par(mar = rep(.5, 4))
@@ -266,10 +266,10 @@ plot_results <- function(calpuff_files,
     expPop2 %>% filter(min >= threshold) %>% group_by(name, titletxt, threshold) %>%
       summarise_at(c('pop', 'area'), sum, na.rm=T) -> pop_exceed
     
-    write_csv(expPop2, file.path(dir, paste0("expPop_new_format",fn.ext,".csv")))
-    write_csv(pop_exceed, file.path(dir, paste0("threshold_exceedances",fn.ext,".csv")))
+    write_csv(expPop2, file.path(dir, paste0("expPop_new_format",filename_suffix,".csv")))
+    write_csv(pop_exceed, file.path(dir, paste0("threshold_exceedances",filename_suffix,".csv")))
     
-    outF <- file(file.path(dir, paste0("expPop",fn.ext,".csv")),"w")
+    outF <- file(file.path(dir, paste0("expPop",filename_suffix,".csv")),"w")
     # names(expPop) <- gsub("\n"," ",calpuff_files[queue,"titletxt"])
     for(n in names(expPop)) {
       writeLines(n,outF)
