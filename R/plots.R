@@ -1,3 +1,26 @@
+
+get_cities = function(plot_bb, grids, n=8, additional_city_regex='$^') {
+  # Add cities
+  cities <- creahelpers::get_boundaries_path('citiesDistToLarge.shp') %>% sf::read_sf() %>% as("Spatial") %>% 
+    raster::crop(grids$gridLL) %>% spTransform(crs(grids$gridR))
+  
+  cities$ID = 1:nrow(cities)
+  cities %>% raster::crop(plot_bb * .8) -> cityPlot
+  cityPlot$ID[c(order(-sp$dstTLrg)[1:n], grep(additional_city_regex, sp$name))] %>% unique -> plot_cities
+
+  cities$plot = cities$ID %in% plot_cities
+  cities$pos = ifelse(cities@coords[, 1] < plot_bb@xmin + (plot_bb@xmax - plot_bb@xmin) * 1/3, 4, 2)
+  
+  return(cities)
+}
+
+make_titletxt = function(calpuff_files) {
+  paste0(ifelse(calpuff_files[["hr"]]<=24,paste0("Maximum ",calpuff_files[["hr"]],"-hour "),
+                ifelse(calpuff_files[["type"]]=="concentration","Annual mean ","Annual total ")),
+         calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
+         "\nfrom ",calpuff_files[["scenarioName"]])
+}
+
 #' Title
 #'
 #' @param plants
@@ -5,85 +28,52 @@
 #' @param outputs
 #' @param dir 
 #' @param map_res in kilometers
-#' @param utm_zone 
-#' @param utm_hem 
 #'
 #' @return
 #' @export
 #'
 #' @examples
-plot_results <- function(dir,
-                         map_res=10,
-                         utm_zone=NULL,
-                         utm_hem=NULL,
+plot_results <- function(calpuff_files,
+                         dir=getwd(),
+                         map_res=1,
                          plants=NULL,
-                         plants_file=NULL,
+                         plant_names=NULL,
+                         adm_level=0,
+                         plot_km=400,
+                         plot_bb=NULL,
+                         cities=NULL,
+                         queue=T,
+                         test=F,
                          outputs=c("png", "kml", "expPop", "cityconcs")){
   
-  # Get plants spatial data
-  if(is.null(plants) & !is.null(plants_file)){
-    plants <- read.csv(plants_file)
-  }
-  
-  plants %<>%
-    creahelpers::to_spdf()
+  if(is.null(plant_names) & !is.null(plants)) plants$Source <- plant_names
   
   # Get grids
-  utm_zone <- if(!is.null(utm_zone)) utm_zone else get_utm_zone(loc=plants)
-  utm_hem <- if(!is.null(utm_hem)) utm_hem else get_utm_hem(loc=plants)
-  calpuff_files <- get_calpuff_files(dir=dir)
-  grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files, utm_zone=utm_zone, utm_hem=utm_hem, map_res=map_res)
+  grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files)
   files <- calpuff_files$path
   
   # Get boundary box
-  plants %<>% spTransform(crs(grids$gridR))
-  plot_km <- 400
-  plot_bb <- plants %>% extent %>% magrittr::add(plot_km)
+  if(!is.null(plants)) plants %<>% creahelpers::to_spdf() %>% spTransform(crs(grids$gridR))
   
-  
-  #
-  #   CFPPs %<>% distinct(Lat, Long, .keep_all = T) %>%
-  #     sel(Plant, Lat, Long, Status) %>% mutate(Source = Plant %>% gsub(' power station', '', ., ignore.case = T) %>%
-  #                                                gsub(' Unit.*', '', .) %>%
-  #                                                gsub(' U[0-9\\-]*', '', .)) %>%
-  #     spdf %>% spTransform(crs(gridR))
-  
-  # Add cities
-  cities <- creahelpers::get_boundaries_path('citiesDistToLarge.shp') %>% sf::read_sf() %>% as("Spatial")
-  cities %>% raster::crop(grids$gridLL) %>% spTransform(crs(grids$gridR)) %>% raster::crop(plot_bb * .8) %>%
-    (function(sp) sp[c(order(-sp$dstTLrg)[1:8], which(sp$name == 'Islamkot')), ]) -> cityPlot
-  cityPlot$pos = ifelse(cityPlot@coords[, 1] < plot_bb@xmin + (plot_bb@xmax - plot_bb@xmin) * 1/3, 4, 2)
-  cityPlot$pos[cityPlot$name == 'Badin'] <- 1
+  if(is.null(plot_bb)) plot_bb <- plants %>% extent %>% magrittr::add(plot_km)
+  if(is.null(cities)) cities <- get_cities(plot_bb, grids)
+  if(is.null(cities$plot)) cities$plot = T
+  cityPlot <- cities %>% subset(plot)
   
   # Output maps
   if("kml" %in% outputs) {
-    #install.packages(c('plotrix', 'dismo', 'pixmap', 'RSAGA', 'colorRamps', 'aqp'))
-    # library(plotKML)
-    # if(!file.exists("zip.exe"))
-    #   file.copy(paste0(HIApath, "zip.exe"),"zip.exe")
     label_file <- system.file("extdata", "factory.png", package="creapuff")
     file.copy(label_file, file.path(dir, basename(label_file)))
   }
   
-  adm0_utm <- creahelpers::get_adm(0, res="coarse") %>% cropProj(grids$gridR)
-  
+  adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% cropProj(grids$gridR)
   
   expPop <- list()
   popCP = makePop(grids=grids)
   
-  calpuff_files$scenarioName <- calpuff_files$scenario
-  # "Operating CFPPs"
-  # calpuff_files$scenarioName[calpuff_files$scenario=='oprnew_a'] <- "Operating&Proposed CFPPs"
-  calpuff_files$titletxt <- NA
-  calpuff_files$titletxt <- paste0(ifelse(calpuff_files[["hr"]]<=24,paste0("Maximum ",calpuff_files[["hr"]],"-hour "),
-                                         ifelse(calpuff_files[["type"]]=="concentration","Annual mean ","Annual total ")),
-                                  calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
-                                  "\nfrom ",calpuff_files[["scenarioName"]])
+  if(is.null(calpuff_files$scenarioName)) calpuff_files$scenarioName <- calpuff_files$scenario
   
-  queue=which(calpuff_files$type=='concentration' &
-                (calpuff_files$period == 'annual' | !is.na(calpuff_files$threshold)))  #1:nrow(calpuff_files) #which(calpuff_files$scenario=='ppmine') #
-  test=F
-  fn.ext <- "" #add an extension to end of filenames to avoid overwriting
+  if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
   
   #set max value shown in graphs for each variable
   colorkeybasis <- calpuff_files$scenario[1] #"opr_all"  #'matar1' #set NULL to set colorkey separately for each scenario
@@ -96,7 +86,7 @@ plot_results <- function(dir,
                       1:nrow(calpuff_files) %in% queue &
                       is.na(calpuff_files$k))){
       
-      rfile <- gsub(".csv",".tif",files[file])
+      rfile <- files[file]
       
       if(!file.exists(rfile)){
         warning("Tif file doesn't exist. Recreating them now")
@@ -119,7 +109,7 @@ plot_results <- function(dir,
   
   #output maps
   for(file in queue[ifelse(test,1,T)]) {
-    rfile <- gsub(".csv",".tif",files[file])
+    rfile <- files[file]
     if(file.exists(rfile)){
       raster(rfile) %>% #crop(plot_bb) %>%
         disaggregate(2, method='bilinear') -> conc_R
@@ -172,20 +162,20 @@ plot_results <- function(dir,
                         margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
                         par.settings=parSets,
                         main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
-          layer(sp.lines(adm0_utm, lwd=3, col='darkgray')) +
-          layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7)) +
-          layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
+          layer(sp.lines(adm_utm, lwd=3, col='darkgray'))
+        
+        if(!is.null(plants_plot)) {
+          pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
+        }
+        
+        pl = pl + layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
           layer(sp.text(coordinates(cityPlot), txt = cityPlot$name,
                         pos = cityPlot$pos,col=labelcol,font=1, cex=.7))
         
-        if(F) {
+        if(!is.null(plant_names)) {
           pl = pl + layer(sp.text(textbuffer(coordinates(plants_plot),width=1.2,steps=16),
-                                  txt = rep(CFPPplot$Source,16), pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
-            # layer(sp.text(coordinates(plants_plot), txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red")) +
-            layer(sp.text(admlab@coords,
-                          admlab %>% row.names,
-                          col='maroon3', font=3),
-                  data=list(admlab=admlab))
+                                  txt = rep(plants_plot$Source,16), pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
+            layer(sp.text(coordinates(plants_plot), txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"))
         }
         
         print(pl)
