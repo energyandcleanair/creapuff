@@ -42,6 +42,7 @@ Depends:
     ncdf4,
     ggplot2,
     creahelpers,
+    rasterVis,
     plotKML
 Suggests: 
     testthat(>= 2.1.0),
