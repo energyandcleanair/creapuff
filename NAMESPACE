@@ -69,6 +69,7 @@ importFrom(plyr,.)
 importFrom(plyr,ddply)
 importFrom(plyr,dlply)
 importFrom(plyr,ldply)
+importFrom(plyr,alply)
 
 importFrom(raster,"crs<-")
 importFrom(raster,aggregate)
