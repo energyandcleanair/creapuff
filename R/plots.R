@@ -72,7 +72,7 @@ plot_results <- function(calpuff_files,
     file.copy(label_file, file.path(dir, basename(label_file)))
   }
   
-  adm0_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
+  adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
 
   expPop <- list()
   popCP = makePop(grids=grids)
@@ -153,21 +153,31 @@ plot_results <- function(calpuff_files,
                       margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
                       par.settings=parSets,
                       main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
-        layer(sp::sp.lines(adm_utm, lwd=3, col='darkgray'))
+        layer(sp::sp.lines(adm_utm, lwd=3, col='darkgray'),
+              data=list(adm_utm=adm_utm))
       
       if(!is.null(plants_plot)) {
-        pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
+        pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7),
+                        data=list(plants_plot=plants_plot))
       }
       
-      pl = pl + layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
-        layer(sp.text(sp::coordinates(cityPlot), txt = cityPlot$name,
-                      pos = cityPlot$pos,col=labelcol,font=1, cex=.7))
+      pl = pl + 
+        layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol), 
+              data=list(cityPlot=cityPlot, labelcol=labelcol)) +
+        layer(sp.text(coords, txt = cityPlot$name, pos = cityPlot$pos, 
+                      col=labelcol,font=1, cex=.7),
+              data=list(cityPlot=cityPlot,
+                        coords=sp::coordinates(cityPlot),
+                        labelcol=labelcol))
       
       if(!is.null(plant_names)) {
-        pl = pl + layer(sp.text(textbuffer(sp::coordinates(plants_plot),width=1.2,steps=16),
+        pl = pl + layer(sp.text(coords,
                                 txt = plants_plot$Source %>% lapply(rep,16) %>% unlist, 
-                                pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
-          layer(sp.text(sp::coordinates(plants_plot), txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"))
+                                pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1)),
+                        data=list(plants_plot=plants_plot,
+                                  coords=textbuffer(sp::coordinates(plants_plot),width=1.2,steps=16))) +
+          layer(sp.text(coords, txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"),
+                data=list(plants_plot=plants_plot, coords=sp::coordinates(plants_plot)))
       }
       
       print(pl)
