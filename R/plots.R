@@ -47,7 +47,8 @@ plot_results <- function(calpuff_files,
                          filename_suffix="",
                          outputs=c("png", "kml", "expPop", "cityconcs")){
   
-  if(is.null(plant_names) & !is.null(plants)) plants$Source <- plant_names
+  if(!is.null(plant_names) & !is.null(plants)) plants$Source <- plant_names
+  if(is.null(plant_names) & !is.null(plants)) plants$Source <- ""
   
   # Get grids
   grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files)
@@ -87,21 +88,13 @@ plot_results <- function(calpuff_files,
       
       rfile <- files[file]
       
-      if(!file.exists(rfile)){
-        warning("Tif file doesn't exist. Recreating them now")
-        suppressMessages(make_tifs(calpuff_files=calpuff_files, grids=grids))
-      }
+      raster(rfile) -> conc_R
+      prb = ifelse(calpuff_files$type[file] == 'deposition', .999625, 1)
+      calpuff_files[calpuff_files$species == calpuff_files[file,"species"] &
+                      calpuff_files$period == calpuff_files[file,"period"]
+                    ,"k"] <- quantile(values(conc_R),probs=prb)
+      print(files[file])  
       
-      if(!file.exists(rfile)){
-       warning("File still does not exist: ", rfile, "[IGNORING]")
-      }else{
-        raster(rfile) -> conc_R
-        prb = ifelse(calpuff_files$type[file] == 'deposition', .999625, 1)
-        calpuff_files[calpuff_files$species == calpuff_files[file,"species"] &
-                        calpuff_files$period == calpuff_files[file,"period"]
-                      ,"k"] <- quantile(values(conc_R),probs=prb)
-        print(files[file])  
-      }
     }
   }
   
@@ -123,9 +116,6 @@ plot_results <- function(calpuff_files,
       thr <- calpuff_files[file,"threshold"]
       exceed <- !is.na(thr) & max(values(conc_R)) >= thr
       if(!is.na(thr)) print(paste("threshold", ifelse(exceed,"","not"),"exceeded for",calpuff_files[file,"titletxt"]))
-      
-      plants -> plants_plot
-      # CFPP_SP -> CFPPplot
       
       if("png" %in% outputs) {
         plumeBreaks <- c(seq(0,1,1/40)^3,2000)
@@ -164,18 +154,19 @@ plot_results <- function(calpuff_files,
                         main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
           layer(sp.lines(adm_utm, lwd=3, col='darkgray'))
         
-        if(!is.null(plants_plot)) {
-          pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
+        if(!is.null(plants)) {
+          pl = pl + layer(sp.points(plants, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
         }
         
         pl = pl + layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
-          layer(sp.text(coordinates(cityPlot), txt = cityPlot$name,
+          layer(sp.text(sp::coordinates(cityPlot), txt = cityPlot$name,
                         pos = cityPlot$pos,col=labelcol,font=1, cex=.7))
         
         if(!is.null(plant_names)) {
-          pl = pl + layer(sp.text(textbuffer(coordinates(plants_plot),width=1.2,steps=16),
-                                  txt = rep(plants_plot$Source,16), pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
-            layer(sp.text(coordinates(plants_plot), txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"))
+          pl = pl + layer(sp.text(textbuffer(sp::coordinates(plants),width=1.2,steps=16),
+                                  txt = plants$Source %>% lapply(rep,16) %>% unlist, 
+                                  pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
+            layer(sp.text(sp::coordinates(plants), txt = plants$Source, pos = 4,font=2,cex=.6,col="red"))
         }
         
         print(pl)
@@ -239,7 +230,7 @@ plot_results <- function(calpuff_files,
                     labels=level,
                     LabelScale=0.5)
           
-          kml_layer(obj=plants_plot, subfolder.name="Modeled sources",
+          kml_layer(obj=plants, subfolder.name="Modeled sources",
                     size=1,
                     alpha=1,altitude=0,
                     labels=Source,
