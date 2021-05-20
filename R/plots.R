@@ -46,7 +46,8 @@ plot_results <- function(calpuff_files,
                          colorkeybasis=NULL,
                          queue=seq_along(calpuff_files$path),
                          filename_suffix="",
-                         outputs=c("png", "kml", "expPop", "cityconcs")){
+                         outputs=c("png", "kml", "expPop", "cityconcs"),
+                         zipping_function=zip::zip){
   
   if(!is.null(plants)) {
     if(!is.null(plant_names)) plants$Source <- plant_names
@@ -241,8 +242,8 @@ plot_results <- function(calpuff_files,
         kml_screen(image.file="label.png",position="UL",sname="Label")
         kml_close(kml_file)
         
-        zip(kmz_file,
-            c(kml_file, file.path(dir,c("factory.png","label.png"))))
+        zipping_function(kmz_file,
+                         c(kml_file, file.path(dir,c("factory.png","label.png"))))
         
         if(!file.exists(kmz_file)) stop("creating kmz failed")
         file.remove(kml_file)
