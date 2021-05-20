@@ -82,7 +82,6 @@ plot_results <- function(calpuff_files,
   if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
   
   #set max value shown in graphs for each variable
-  
   if(is.null(calpuff_files$k)) calpuff_files$k <- NA
   
   if(!is.null(colorkeybasis)){
@@ -104,12 +103,12 @@ plot_results <- function(calpuff_files,
   for(file in queue) {
     files[file] %>% raster() -> conc_R
     
-    disaggregation_factor = ceiling(mean(res(concR))/map_res)
+    disaggregation_factor = ceiling(mean(res(conc_R))/map_res)
     if(disaggregation_factor>1) conc_R %<>% disaggregate(disaggregation_factor, method='bilinear')
     
     max(values(conc_R)) -> maxVal
     
-    plants_plot = get_plants(plants, calpuff_files$scenario[file])
+    plants_plot <- get_plants(plants, calpuff_files$scenario[file])
     
     if(is.null(colorkeybasis)) {
       k=quantile(values(conc_R),probs=.9995)
@@ -136,7 +135,6 @@ plot_results <- function(calpuff_files,
       al <- seq(0,k,sigfloor(k/5))
       axislabels = list(at=al,labels=al)
       
-      require(rasterVis)
       parSets = rasterTheme(region=colRamp)
       parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
       parSets$layout.widths$ylab.right = 2
