@@ -920,3 +920,7 @@ read_calpost = function(csvfile) {
   read.table(csvfile, skip=startline,header=F,sep=",")
 }
 
+get_wdpa_for_grid = function(grids) {
+  grids$gridR %>% projectExtent(crs(rworldmap::countriesLow)) %>% extent %>% 
+    magrittr::multiply_by(1.1) %>% as.matrix %>% creahelpers::get_wdpa()
+}
