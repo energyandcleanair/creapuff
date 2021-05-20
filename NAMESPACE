@@ -117,6 +117,8 @@ importFrom(tidyr,separate)
 
 importFrom(stringr,str_detect)
 
+importFrom(zip,zip)
+
 importFrom(zoo,na.approx)
 importFrom(zoo,na.fill)
 
