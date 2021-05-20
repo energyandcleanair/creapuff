@@ -36,13 +36,13 @@ Imports:
     raster,
     sp,
     ncdf4,
-    plotKML
+    plotKML,
+    rasterVis
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
 Depends:
-    ggplot2,
-    creahelpers
+    ggplot2
 Suggests: 
     testthat(>= 2.1.0),
 VignetteBuilder:

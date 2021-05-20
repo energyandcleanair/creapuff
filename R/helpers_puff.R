@@ -77,35 +77,44 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
 
 get_grids_calpuff <- function(calpuff_files,
                               runName=NULL,
-                              utm_zone=get('utm_zone', envir=.GlobalEnv),
-                              utm_hem=get('utm_hem', envir=.GlobalEnv),
-                              map_res=get('map_res', envir=.GlobalEnv),
+                              utm_zone=NULL,
+                              utm_hem=NULL,
+                              map_res=NULL,
                               filepath=NULL) {
   
   if(is.null(runName)) runName <- calpuff_files[1,'scenario']
   
   if(is.null(filepath))
     filepath <- calpuff_files[calpuff_files$species=="pm25" &
-                                # calpuff_files$hr>24 & # This didn't work with Vietnam, replaced with the line below
-                                !str_detect(calpuff_files$path,"\\(all\\)") &
+                                calpuff_files$hr>24 & 
                                 calpuff_files$scenario %in% runName, "path"][1]
   
-  poll <- read.table(filepath,
-                     skip=7,header=F,col.names=c("Xkm","Ykm","PM25"), sep=",")
   
-  pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
-                                   data = subset(poll,select=-c(Xkm,Ykm)),
-                                   proj4string = CRS(paste0("+proj=utm +zone=",utm_zone,
-                                                            ifelse(utm_hem=="S"," +south",""),
-                                                            " +datum=WGS84 +units=km +no_defs")))
-  domain <- extent(pollSP)
-  res <- (domain@xmax - domain@xmin)/49
-  domain <- extend(domain,res/2)
-  
-  r <- raster(domain, resolution=map_res, crs=crs(pollSP))
-  
-  gridSP <- as(r, 'SpatialPixels') #CHECK We removed global variable
-  gridR <- raster(gridSP)
+  if(grepl('\\.tif$', filepath)) {
+    gridR <- filepath %>% raster %>% raster %>% fixproj()
+    gridSP <- NULL
+  } else {
+    if(is.null(utm_zone)) utm_zone=get('utm_zone', envir=.GlobalEnv)
+    if(is.null(utm_hem)) utm_hem=get('utm_hem', envir=.GlobalEnv)
+    if(is.null(map_res)) map_res=get('map_res', envir=.GlobalEnv)
+    
+    poll <- read.table(filepath,
+                       skip=7,header=F,col.names=c("Xkm","Ykm","PM25"), sep=",")
+    
+    pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
+                                     data = subset(poll,select=-c(Xkm,Ykm)),
+                                     proj4string = CRS(paste0("+proj=utm +zone=",utm_zone,
+                                                              ifelse(utm_hem=="S"," +south",""),
+                                                              " +datum=WGS84 +units=km +no_defs")))
+    domain <- extent(pollSP)
+    res <- (domain@xmax - domain@xmin)/49
+    domain <- extend(domain,res/2)
+    
+    r <- raster(domain, resolution=map_res, crs=crs(pollSP))
+    
+    gridSP <- as(r, 'SpatialPixels') #CHECK We removed global variable
+    gridR <- raster(gridSP)
+  }
   
   gridLL <- projectRaster(gridR, crs = proj4string(rworldmap::countriesLow))
   gridLL <- extend(gridLL, c(40,40))

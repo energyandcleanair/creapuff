@@ -67,12 +67,12 @@ textbuffer <- function(coords,width=5,steps=8) {
   theta <- seq(0, 2 * pi, length.out = steps + 1)[-1]
   coords %>%
     matrix(ncol=2) %>%
-    alply(1,
-          function(c.in) {
-            matrix(c(c.in[1] + width * cos(theta),
-                     c.in[2] + width * sin(theta)),
-                   ncol=2)
-          }) %>%
+    plyr::alply(1,
+                function(c.in) {
+                  matrix(c(c.in[1] + width * cos(theta),
+                           c.in[2] + width * sin(theta)),
+                         ncol=2)
+                }) %>%
     do.call(rbind, .)
 }
 
@@ -226,7 +226,6 @@ writeConcKML <- function(outFileName,plotTitle=outFileName,
                          labelSize=.5,
                          iconScale=.5,
                          iconScaleCol=NULL) {
-  require(plotKML)
   initkml()
   colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
   
