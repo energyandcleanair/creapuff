@@ -255,7 +255,7 @@ plot_results <- function(calpuff_files,
   
   
   if("expPop" %in% outputs) {
-    expPop %>% ldply(.id='name') %>% left_join(calpuff_files %>% sel(name, titletxt, threshold)) -> expPop2
+    expPop %>% ldply(.id='name') %>% left_join(calpuff_files %>% select(name, titletxt, threshold)) -> expPop2
     expPop2 %>% filter(min >= threshold) %>% group_by(name, titletxt, threshold) %>%
       summarise_at(c('pop', 'area'), sum, na.rm=T) -> pop_exceed
     
@@ -263,7 +263,7 @@ plot_results <- function(calpuff_files,
     write_csv(pop_exceed, file.path(dir, paste0("threshold_exceedances",filename_suffix,".csv")))
     
     outF <- file(file.path(dir, paste0("expPop",filename_suffix,".csv")),"w")
-    # names(expPop) <- gsub("\n"," ",calpuff_files[queue,"titletxt"])
+    
     for(n in names(expPop)) {
       writeLines(n,outF)
       write.table(expPop[[n]],outF,append=T,row.names=F,quote=T,sep=",")
