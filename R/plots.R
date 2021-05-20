@@ -38,6 +38,7 @@ plot_results <- function(calpuff_files,
                          map_res=1,
                          plants=NULL,
                          plant_names=NULL,
+                         get_plants=function(x, ...) { return(x) },
                          adm_level=0,
                          plot_km=400,
                          plot_bb=NULL,
@@ -47,8 +48,10 @@ plot_results <- function(calpuff_files,
                          filename_suffix="",
                          outputs=c("png", "kml", "expPop", "cityconcs")){
   
-  if(!is.null(plant_names) & !is.null(plants)) plants$Source <- plant_names
-  if(is.null(plant_names) & !is.null(plants)) plants$Source <- ""
+  if(!is.null(plants)) {
+    if(!is.null(plant_names)) plants$Source <- plant_names
+    if(is.null(plant_names) & is.null(plants$Source)) plants$Source <- ""
+  }
   
   # Get grids
   grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files)
@@ -102,150 +105,148 @@ plot_results <- function(calpuff_files,
   #output maps
   for(file in queue) {
     rfile <- files[file]
-    if(file.exists(rfile)){
-      raster(rfile) %>% 
-        disaggregate(2, method='bilinear') -> conc_R
-      max(values(conc_R)) -> maxVal
+    raster(rfile) %>% disaggregate(2, method='bilinear') -> conc_R
+    max(values(conc_R)) -> maxVal
+    
+    plants_plot = get_plants(plants, calpuff_files$scenario[file])
+    
+    if(is.null(colorkeybasis)) {
+      k=quantile(values(conc_R),probs=.9995)
+      calpuff_files[file,"k"] <- k
+    } else calpuff_files[file,"k"] -> k
+    
+    thr <- calpuff_files[file,"threshold"]
+    exceed <- !is.na(thr) & max(values(conc_R)) >= thr
+    if(!is.na(thr)) print(paste("threshold", ifelse(exceed,"","not"),"exceeded for",calpuff_files[file,"titletxt"]))
+    
+    if("png" %in% outputs) {
+      plumeBreaks <- c(seq(0,1,1/40)^3,2000)
+      if(calpuff_files[file,"species"] %in% c("pm25","tpm10","tsp")) {
+        colRamp <- colorRampPalette(colors=c("white","gray","yellow","red","black"))(42)
+        labelcol="blue"
+        wetlandcol="purple"
+      } else {
+        colRamp <- colorRampPalette(colors=c("white","gray","cyan","blue","purple"))(42)
+        labelcol="black"
+        wetlandcol="red" }
       
-      #k=ifelse(calpuff_files[file,"type"]=="deposition",quantile(values(conc_R),probs=.9995),max(values(conc_R)))
-      if(is.null(colorkeybasis)) {
-        k=quantile(values(conc_R),probs=.9995)
-        calpuff_files[file,"k"] <- k
-      } else calpuff_files[file,"k"] -> k
+      plumeBreaks <- plumeBreaks * k
       
-      thr <- calpuff_files[file,"threshold"]
-      exceed <- !is.na(thr) & max(values(conc_R)) >= thr
-      if(!is.na(thr)) print(paste("threshold", ifelse(exceed,"","not"),"exceeded for",calpuff_files[file,"titletxt"]))
+      al <- seq(0,k,sigfloor(k/5))
+      axislabels = list(at=al,labels=al)
       
-      if("png" %in% outputs) {
-        plumeBreaks <- c(seq(0,1,1/40)^3,2000)
-        if(calpuff_files[file,"species"] %in% c("pm25","tpm10","tsp")) {
-          colRamp <- colorRampPalette(colors=c("white","gray","yellow","red","black"))(42)
-          labelcol="blue"
-          wetlandcol="purple"
-        } else {
-          colRamp <- colorRampPalette(colors=c("white","gray","cyan","blue","purple"))(42)
-          labelcol="black"
-          wetlandcol="red" }
-        
-        plumeBreaks <- plumeBreaks * k
-        
-        al <- seq(0,k,sigfloor(k/5))
-        axislabels = list(at=al,labels=al)
-        
-        require(rasterVis)
-        parSets = rasterTheme(region=colRamp)
-        parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
-        parSets$layout.widths$ylab.right = 2
-        parSets$fontsize$text = 12*1.8; parSets$fontsize$points = 8*1.5
-        parSets$axis.components$left$tck = 0
-        parSets$axis.components$bottom$tck = 0
-        parSets$axis.line=list(lwd=3)
-        parSets$panel.background$col <- colRamp[length(colRamp)]
-        
-        outpng <- gsub("\\.csv|\\.tif",paste0("_levelplot",filename_suffix,".png"),files[file])
-        png(filename =  outpng,
-            width = 3000, height = 2000, units = "px",
-            bg = "white",res=200)
-        
-        pl <- levelplot(crop(conc_R,plot_bb),
-                        margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
-                        par.settings=parSets,
-                        main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
-          layer(sp.lines(adm_utm, lwd=3, col='darkgray'))
-        
-        if(!is.null(plants)) {
-          pl = pl + layer(sp.points(plants, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
-        }
-        
-        pl = pl + layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
-          layer(sp.text(sp::coordinates(cityPlot), txt = cityPlot$name,
-                        pos = cityPlot$pos,col=labelcol,font=1, cex=.7))
-        
-        if(!is.null(plant_names)) {
-          pl = pl + layer(sp.text(textbuffer(sp::coordinates(plants),width=1.2,steps=16),
-                                  txt = plants$Source %>% lapply(rep,16) %>% unlist, 
-                                  pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
-            layer(sp.text(sp::coordinates(plants), txt = plants$Source, pos = 4,font=2,cex=.6,col="red"))
-        }
-        
-        print(pl)
-        
-        dev.off()
+      require(rasterVis)
+      parSets = rasterTheme(region=colRamp)
+      parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
+      parSets$layout.widths$ylab.right = 2
+      parSets$fontsize$text = 12*1.8; parSets$fontsize$points = 8*1.5
+      parSets$axis.components$left$tck = 0
+      parSets$axis.components$bottom$tck = 0
+      parSets$axis.line=list(lwd=3)
+      parSets$panel.background$col <- colRamp[length(colRamp)]
+      
+      outpng <- gsub("\\.csv|\\.tif",paste0("_levelplot",filename_suffix,".png"),files[file])
+      png(filename =  outpng,
+          width = 3000, height = 2000, units = "px",
+          bg = "white",res=200)
+      
+      pl <- levelplot(crop(conc_R,plot_bb),
+                      margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
+                      par.settings=parSets,
+                      main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
+        layer(sp.lines(adm_utm, lwd=3, col='darkgray'))
+      
+      if(!is.null(plants_plot)) {
+        pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
       }
       
-      if("kml" %in% outputs | "expPop" %in% outputs) {
+      pl = pl + layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol)) +
+        layer(sp.text(sp::coordinates(cityPlot), txt = cityPlot$name,
+                      pos = cityPlot$pos,col=labelcol,font=1, cex=.7))
+      
+      if(!is.null(plant_names)) {
+        pl = pl + layer(sp.text(textbuffer(sp::coordinates(plants_plot),width=1.2,steps=16),
+                                txt = plants_plot$Source %>% lapply(rep,16) %>% unlist, 
+                                pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1))) +
+          layer(sp.text(sp::coordinates(plants_plot), txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"))
+      }
+      
+      print(pl)
+      
+      dev.off()
+    }
+    
+    if("kml" %in% outputs | "expPop" %in% outputs) {
+      
+      lvls = unique(signif(c(k/10,seq(k/5,k,k/5)),1))
+      
+      if(!is.na(thr) & exceed) { #if a threshold has been specified, ensure it is included in levels
+        lvls <- lvls[abs(lvls / thr - 1) > .1] #eliminate levels close to the threshold
+        lvls <- sort(unique(c(lvls,thr)))
+      }
+      
+      contP_UTM <- raster2contourPolys(conc_R,levels=lvls)[-1,]
+      
+      if("expPop" %in% outputs)
+        expPop[[calpuff_files[file,"name"]]] <- data.frame(contP_UTM@data,
+                                                           levelname=paste0(contP_UTM$level,calpuff_files[file,"unit"]),
+                                                           pop=raster::extract(popCP,contP_UTM,sum,na.rm=T),
+                                                           area=area(contP_UTM))
+      
+      if("kml" %in% outputs) {
+        contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
+        outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
         
-        lvls = unique(signif(c(k/10,seq(k/5,k,k/5)),1))
+        colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
         
-        if(!is.na(thr) & exceed) { #if a threshold has been specified, ensure it is included in levels
-          lvls <- lvls[abs(lvls / thr - 1) > .1] #eliminate levels close to the threshold
-          lvls <- sort(unique(c(lvls,thr)))
-        }
         
-        contP_UTM <- raster2contourPolys(conc_R,levels=lvls)[-1,]
+        png(file.path(dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
         
-        if("expPop" %in% outputs)
-          expPop[[calpuff_files[file,"name"]]] <- data.frame(contP_UTM@data,
-                                                             levelname=paste0(contP_UTM$level,calpuff_files[file,"unit"]),
-                                                             pop=raster::extract(popCP,contP_UTM,sum,na.rm=T),
-                                                             area=area(contP_UTM))
+        decimals <- lvls %>% subset(.>0) %>% min %>%
+          log10 %>% -. %>% ceiling %>% max(0)
+        legendlvls <- round(lvls, decimals)
         
-        if("kml" %in% outputs) {
-          contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
-          outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
-          
-          colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
-          
-          
-          png(file.path(dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
-          
-          decimals <- lvls %>% subset(.>0) %>% min %>%
-            log10 %>% -. %>% ceiling %>% max(0)
-          legendlvls <- round(lvls, decimals)
-          
-          leg.title <- paste0(gsub(filename_suffix, "", outL),
-                              " (", calpuff_files[file,"unit"], ")")
-          
-          par(mar = rep(.5, 4))
-          plot(1, type="n", axes=FALSE, xlab="", ylab="")
-          legend("topleft", legend = legendlvls, col=yorb, pch = 15,
-                 xjust=0.5, yjust=0,horiz=T,
-                 title = leg.title,
-                 bg="white",
-                 text.width = 1.2*max(strwidth(legendlvls[-length(legendlvls)])))
-          dev.off()
-          
-          kml_file <- file.path(dir, paste0(outL,".kml"))
-          kmz_file <- file.path(dir, paste0(outL,".kmz"))
-          colour <- rank(contP@data$max)
-          kml_open(kml_file)
-          kml_layer(obj=contP,
-                    subfolder.name=calpuff_files[file,"unit"],
-                    # colour=colour, #TODO NOT SURE WHY IT DOESN'T WORK
-                    colour_scale=yorb,
-                    alpha=0.5,
-                    altitude=0,
-                    plot.labpt=F,
-                    labels=level,
-                    LabelScale=0.5)
-          
-          kml_layer(obj=plants, subfolder.name="Modeled sources",
-                    size=1,
-                    alpha=1,altitude=0,
-                    labels=Source,
-                    LabelScale=0.5,sname="labels", shape="factory.png")
-          
-          kml_screen(image.file="label.png",position="UL",sname="Label")
-          kml_close(kml_file)
-          
-          zip(kmz_file,
-              c(kml_file, file.path(dir,c("factory.png","label.png"))))
-          
-          if(!file.exists(kmz_file)) stop("creating kmz failed")
-          file.remove(kml_file)
-          file.remove(file.path(dir,"label.png"))
-        }
+        leg.title <- paste0(gsub(filename_suffix, "", outL),
+                            " (", calpuff_files[file,"unit"], ")")
+        
+        par(mar = rep(.5, 4))
+        plot(1, type="n", axes=FALSE, xlab="", ylab="")
+        legend("topleft", legend = legendlvls, col=yorb, pch = 15,
+               xjust=0.5, yjust=0,horiz=T,
+               title = leg.title,
+               bg="white",
+               text.width = 1.2*max(strwidth(legendlvls[-length(legendlvls)])))
+        dev.off()
+        
+        kml_file <- file.path(dir, paste0(outL,".kml"))
+        kmz_file <- file.path(dir, paste0(outL,".kmz"))
+        colour <- rank(contP@data$max)
+        kml_open(kml_file)
+        kml_layer(obj=contP,
+                  subfolder.name=calpuff_files[file,"unit"],
+                  # colour=colour, #TODO NOT SURE WHY IT DOESN'T WORK
+                  colour_scale=yorb,
+                  alpha=0.5,
+                  altitude=0,
+                  plot.labpt=F,
+                  labels=level,
+                  LabelScale=0.5)
+        
+        kml_layer(obj=plants_plot, subfolder.name="Modeled sources",
+                  size=1,
+                  alpha=1,altitude=0,
+                  labels=Source,
+                  LabelScale=0.5,sname="labels", shape="factory.png")
+        
+        kml_screen(image.file="label.png",position="UL",sname="Label")
+        kml_close(kml_file)
+        
+        zip(kmz_file,
+            c(kml_file, file.path(dir,c("factory.png","label.png"))))
+        
+        if(!file.exists(kmz_file)) stop("creating kmz failed")
+        file.remove(kml_file)
+        file.remove(file.path(dir,"label.png"))
       }
     }
   }
