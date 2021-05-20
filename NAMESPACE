@@ -65,6 +65,9 @@ importFrom(magrittr,subtract)
 importFrom(magrittr,use_series)
 importFrom(magrittr,equals)
 
+importFrom(ncdf4,nc_open)
+
+
 importFrom(plyr,.)
 importFrom(plyr,ddply)
 importFrom(plyr,dlply)
