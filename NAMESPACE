@@ -83,6 +83,7 @@ importFrom(raster,projectExtent)
 importFrom(raster,projectRaster)
 importFrom(raster,as.matrix)
 importFrom(raster,cut)
+importFrom(raster,crop)
 
 importFrom(rasterVis,levelplot)
 importFrom(rasterVis,rasterTheme)

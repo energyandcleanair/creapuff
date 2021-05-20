@@ -32,7 +32,7 @@ plot_results <- function(dir,
   utm_zone <- if(!is.null(utm_zone)) utm_zone else get_utm_zone(loc=plants)
   utm_hem <- if(!is.null(utm_hem)) utm_hem else get_utm_hem(loc=plants)
   calpuff_files <- get_calpuff_files(dir=dir)
-  grids <- creapuff::get_grids_calpuff(calpuff_files=calpuff_files, utm_zone=utm_zone, utm_hem=utm_hem, map_res=map_res)
+  grids <- get_grids_calpuff(calpuff_files=calpuff_files, utm_zone=utm_zone, utm_hem=utm_hem, map_res=map_res)
   files <- calpuff_files$path
   
   # Get boundary box
@@ -65,7 +65,7 @@ plot_results <- function(dir,
     file.copy(label_file, file.path(dir, basename(label_file)))
   }
   
-  adm0_utm <- creahelpers::get_adm(0, res="coarse") %>% cropProj(grids$gridR)
+  adm0_utm <- creahelpers::get_adm(0, res="coarse") %>% creahelpers::cropProj(grids$gridR)
   
   
   expPop <- list()
@@ -80,8 +80,10 @@ plot_results <- function(dir,
                                   calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
                                   "\nfrom ",calpuff_files[["scenarioName"]])
   
-  queue=which(calpuff_files$type=='concentration' &
-                (calpuff_files$period == 'annual' | !is.na(calpuff_files$threshold)))  #1:nrow(calpuff_files) #which(calpuff_files$scenario=='ppmine') #
+  queue <- 1:nrow(calpuff_files)
+  # TODO Check we want to plot all of these?
+  #which(calpuff_files$type=='concentration' &
+   #             (calpuff_files$period == 'annual' | !is.na(calpuff_files$threshold)))  #1:nrow(calpuff_files) #which(calpuff_files$scenario=='ppmine') #
   test=F
   fn.ext <- "" #add an extension to end of filenames to avoid overwriting
   

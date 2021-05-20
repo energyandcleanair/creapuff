@@ -32,17 +32,17 @@ Imports:
     DescTools,
     elevatr,
     pbapply,
-    maptools
+    maptools,
+    raster,
+    sp,
+    ncdf4,
+    plotKML
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
 Depends:
-    raster,
-    sp,
-    ncdf4,
     ggplot2,
-    creahelpers,
-    plotKML
+    creahelpers
 Suggests: 
     testthat(>= 2.1.0),
 VignetteBuilder:
