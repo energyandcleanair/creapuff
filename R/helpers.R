@@ -39,15 +39,6 @@ getUTMproj <- function(zone=NULL, hem=NULL, loc=NULL, units="km") {
 }
 
 
-cropProj <- function(shapeobj, rasterobj, expand=4, ...) {
-  shapeobj %>%
-    crop(extent(projectExtent(rasterobj,
-                              crs(shapeobj)))+expand) -> shapeobj
-  if(grepl("Raster", class(shapeobj))) {
-    shapeobj %>% projectRaster(rasterobj, ...) %>% return
-  } else shapeobj %>% spTransform(crs(rasterobj)) %>% return
-}
-
 quickpng <- function(file, width=2000, height=1500, res=300, ...) {
   png(filename=file, width=width, height=height, res=res, ...)
 }
@@ -235,7 +226,6 @@ writeConcKML <- function(outFileName,plotTitle=outFileName,
                          labelSize=.5,
                          iconScale=.5,
                          iconScaleCol=NULL) {
-  require(plotKML)
   initkml()
   colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
   
