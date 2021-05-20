@@ -90,23 +90,23 @@ plot_results <- function(calpuff_files,
                       1:nrow(calpuff_files) %in% queue &
                       is.na(calpuff_files$k))){
       
-      rfile <- files[file]
-      
-      raster(rfile) -> conc_R
+      raster(files[file]) -> conc_R
       prb = ifelse(calpuff_files$type[file] == 'deposition', .999625, 1)
       calpuff_files[calpuff_files$species == calpuff_files[file,"species"] &
                       calpuff_files$period == calpuff_files[file,"period"]
                     ,"k"] <- quantile(values(conc_R),probs=prb)
       print(files[file])  
-      
     }
   }
   
   
   #output maps
   for(file in queue) {
-    rfile <- files[file]
-    raster(rfile) %>% disaggregate(2, method='bilinear') -> conc_R
+    files[file] %>% raster() -> conc_R
+    
+    disaggregation_factor = ceiling(mean(res(concR))/map_res)
+    if(disaggregation_factor>1) conc_R %<>% disaggregate(disaggregation_factor, method='bilinear')
+    
     max(values(conc_R)) -> maxVal
     
     plants_plot = get_plants(plants, calpuff_files$scenario[file])
