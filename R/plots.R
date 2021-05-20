@@ -72,8 +72,8 @@ plot_results <- function(calpuff_files,
     file.copy(label_file, file.path(dir, basename(label_file)))
   }
   
-  adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% cropProj(grids$gridR)
-  
+  adm0_utm <- creahelpers::get_adm(0, res="coarse") %>% creahelpers::cropProj(grids$gridR)
+
   expPop <- list()
   popCP = makePop(grids=grids)
   
@@ -135,7 +135,11 @@ plot_results <- function(calpuff_files,
       al <- seq(0,k,sigfloor(k/5))
       axislabels = list(at=al,labels=al)
       
+<<<<<<< HEAD
       parSets = rasterTheme(region=colRamp)
+=======
+      parSets = rasterVis::rasterTheme(region=colRamp)
+>>>>>>> 30a24df088c4029366fd5b12ae6d40daca5091bc
       parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
       parSets$layout.widths$ylab.right = 2
       parSets$fontsize$text = 12*1.8; parSets$fontsize$points = 8*1.5
@@ -153,7 +157,7 @@ plot_results <- function(calpuff_files,
                       margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
                       par.settings=parSets,
                       main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
-        layer(sp.lines(adm_utm, lwd=3, col='darkgray'))
+        layer(sp::sp.lines(adm_utm, lwd=3, col='darkgray'))
       
       if(!is.null(plants_plot)) {
         pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7))
