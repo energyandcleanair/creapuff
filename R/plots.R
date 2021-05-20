@@ -72,7 +72,7 @@ plot_results <- function(calpuff_files,
     file.copy(label_file, file.path(dir, basename(label_file)))
   }
   
-  adm0_utm <- creahelpers::get_adm(0, res="coarse") %>% creahelpers::cropProj(grids$gridR)
+  adm0_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
 
   expPop <- list()
   popCP = makePop(grids=grids)
@@ -135,11 +135,7 @@ plot_results <- function(calpuff_files,
       al <- seq(0,k,sigfloor(k/5))
       axislabels = list(at=al,labels=al)
       
-<<<<<<< HEAD
-      parSets = rasterTheme(region=colRamp)
-=======
       parSets = rasterVis::rasterTheme(region=colRamp)
->>>>>>> 30a24df088c4029366fd5b12ae6d40daca5091bc
       parSets$layout.widths = list(axis.key.padding = 0, ylab.right = 2)
       parSets$layout.widths$ylab.right = 2
       parSets$fontsize$text = 12*1.8; parSets$fontsize$points = 8*1.5
