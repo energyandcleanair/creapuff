@@ -54,7 +54,6 @@ plot_results(calpuff_files,
              plants=plants,
              plant_names=plants$label,
              get_plants = get_plants,
-             outputs='expPop',
              zipping_function=zipping_function)
 
 get_deposition_results(calpuff_files, dir=output_dir, wdpa_areas=NULL) -> depo
