@@ -82,7 +82,7 @@ get_grids_calpuff <- function(calpuff_files,
                               map_res=NULL,
                               filepath=NULL) {
   
-  if(is.null(runName)) runName <- calpuff_files[1,'scenario']
+  if(is.null(runName)) runName <- calpuff_files$scenario[1]
   
   if(is.null(filepath))
     filepath <- calpuff_files[calpuff_files$species=="pm25" &
