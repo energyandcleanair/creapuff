@@ -263,7 +263,7 @@ plot_results <- function(calpuff_files,
   
   
   if("expPop" %in% outputs) {
-    expPop %>% ldply(.id='name') %>% left_join(calpuff_files %>% select(name, titletxt, threshold)) -> expPop2
+    expPop %>% plyr::ldply(.id='name') %>% left_join(calpuff_files %>% select(name, titletxt, threshold)) -> expPop2
     expPop2 %>% filter(min >= threshold) %>% group_by(name, titletxt, threshold) %>%
       summarise_at(c('pop', 'area'), sum, na.rm=T) -> pop_exceed
     
