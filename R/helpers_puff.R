@@ -76,19 +76,12 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
 
 
 get_grids_calpuff <- function(calpuff_files,
-                              runName=NULL,
                               utm_zone=NULL,
                               utm_hem=NULL,
                               map_res_km=NULL,
                               filepath=NULL) {
   
-  if(is.null(runName)) runName <- calpuff_files[1,'scenario']
-  
-  if(is.null(filepath))
-    filepath <- calpuff_files[calpuff_files$species=="pm25" &
-                                calpuff_files$hr>24 & 
-                                calpuff_files$scenario %in% runName, "path"][1]
-  
+  if(is.null(filepath)) filepath <- calpuff_files$path[1]
   
   if(grepl('\\.tif$', filepath)) {
     gridR <- filepath %>% raster %>% raster %>% fixproj()
@@ -922,5 +915,6 @@ read_calpost = function(csvfile) {
 
 get_wdpa_for_grid = function(grids) {
   grids$gridR %>% projectExtent(crs(rworldmap::countriesLow)) %>% extent %>% 
-    magrittr::multiply_by(1.1) %>% as.matrix %>% creahelpers::get_wdpa()
+    magrittr::multiply_by(1.1) %>% as.matrix %>% creahelpers::get_wdpa() %>% 
+    sp::spTransform(crs(grids$gridR))
 }

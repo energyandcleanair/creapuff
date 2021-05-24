@@ -45,14 +45,15 @@ get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL){
     units = ifelse(grepl('hg', names(depoR)), 'mg', 'kg')
     raster::extract(depoR, wdpa_areas, sum) %>% data.frame -> protdepo
     names(protdepo) <- names(depoR) %>% paste0('_', units, '_total')
-    depoR %>% divide_by(raster::area(.)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
+
+    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
     names(protdepo_per) <- names(depoR) %>% paste0('_', units, '_per.km2')
-    depoR %>% divide_by(area(.)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
+    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
     names(protdepo_maxper) <- names(depoR) %>% paste0('_', units, '_maxper.km2')
     protdepo %<>% bind_cols(protdepo_per, protdepo_maxper)
     wdpa_areas$NAME -> protdepo$name
     
-    protdepo %>% write_csv('WDPA areas deposition.csv')
+    protdepo %>% write_csv(file.path(dir, 'WDPA areas deposition.csv'))
   }
   
   return(list(by_landuse = deposums,
