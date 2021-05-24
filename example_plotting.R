@@ -77,5 +77,4 @@ plot_results(calpuff_files,
 
 #output deposition results
 depo <- get_deposition_results(calpuff_files,
-                       dir=output_dir,
-                       wdpa_areas=get_wdpa_areas(grids))
+                       dir=output_dir)
