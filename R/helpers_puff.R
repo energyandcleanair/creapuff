@@ -79,7 +79,7 @@ get_grids_calpuff <- function(calpuff_files,
                               runName=NULL,
                               utm_zone=NULL,
                               utm_hem=NULL,
-                              map_res=NULL,
+                              map_res_km=NULL,
                               filepath=NULL) {
   
   if(is.null(runName)) runName <- calpuff_files[1,'scenario']
@@ -96,7 +96,7 @@ get_grids_calpuff <- function(calpuff_files,
   } else {
     if(is.null(utm_zone)) utm_zone=get('utm_zone', envir=.GlobalEnv)
     if(is.null(utm_hem)) utm_hem=get('utm_hem', envir=.GlobalEnv)
-    if(is.null(map_res)) map_res=get('map_res', envir=.GlobalEnv)
+    if(is.null(map_res_km)) map_res_km=get('map_res_km', envir=.GlobalEnv)
     
     poll <- read.table(filepath,
                        skip=7,header=F,col.names=c("Xkm","Ykm","PM25"), sep=",")
@@ -110,7 +110,7 @@ get_grids_calpuff <- function(calpuff_files,
     res <- (domain@xmax - domain@xmin)/49
     domain <- extend(domain,res/2)
     
-    r <- raster(domain, resolution=map_res, crs=crs(pollSP))
+    r <- raster(domain, resolution=map_res_km, crs=crs(pollSP))
     
     gridSP <- as(r, 'SpatialPixels') #CHECK We removed global variable
     gridR <- raster(gridSP)
