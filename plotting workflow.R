@@ -74,9 +74,8 @@ plot_results(calpuff_files,
              get_plants = get_plants,
              zipping_function=zipping_function)
 
-#get WDPA protected areas
-grids = creapuff::get_grids_calpuff(calpuff_files)
-wdpa_areas=creahelpers::get_wdpa(raster::bbox(grids$gridLL))
 
 #output deposition results
-get_deposition_results(calpuff_files, dir=output_dir, wdpa_areas=wdpa_areas) -> depo
+depo <- get_deposition_results(calpuff_files,
+                       dir=output_dir,
+                       wdpa_areas=get_wdpa_areas(grids))

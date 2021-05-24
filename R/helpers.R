@@ -350,3 +350,17 @@ makePop <- function(grids,
   
   return(popCP)
 }
+
+get_crs_4326 <- function(){
+  raster::crs(rworldmap::countriesLow)
+}
+
+
+get_wdpa_areas <- function(grids){
+  grids$gridR %>%
+    projectExtent(get_crs_4326()) %>%
+    extent %>%
+    magrittr::multiply_by(1.1) %>%
+    as.matrix %>%
+    creahelpers::get_wdpa()
+}
