@@ -88,7 +88,7 @@ runCalmet <- function(
   domain_center <- m3d_grid %>% bind_rows() %>% summarise_all(mean) %>% to_spdf
   
   #determine coordinate system to use
-  target_crs <- getUTMproj(loc=domain_center)
+  target_crs <- get_utm_proj(loc=domain_center)
   
   #UTM zone and hemisphere
   UTMZ <- target_crs %>% strsplit(' ') %>% unlist %>% 

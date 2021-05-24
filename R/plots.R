@@ -75,7 +75,7 @@ plot_results <- function(calpuff_files,
   adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
 
   expPop <- list()
-  popCP = makePop(grids=grids)
+  popCP = write_conc_kml(grids=grids)
   
   if(is.null(calpuff_files$scenarioName)) calpuff_files$scenarioName <- calpuff_files$scenario
   
