@@ -915,15 +915,15 @@ clean_inp <- function(calpuff_inp) {
 
 
 make_calpuff_inp <- function(files_met,
-                           calpuff_template,
-                           output_dir,
-                           puffrun=NULL,
-                           sourceLines=NULL,
-                           receptors=NULL,
-                           OZONE.DAT=NULL,
-                           bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
-                           addparams=list(),
-                           addsubgroups=list()) {
+                             calpuff_template,
+                             output_dir,
+                             puffrun=NULL,
+                             sourceLines=NULL,
+                             receptors=NULL,
+                             OZONE.DAT=NULL,
+                             bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
+                             addparams=list(),
+                             addsubgroups=list()) {
   
   
   
@@ -1036,8 +1036,8 @@ read_geo <- function(geoPath) {
 }
 
 
-get_plant_elev <- function(sources.sp, dir, out_files) {
-  out_files %>% arrange(GridD) %>%
+get_plant_elev <- function(sources.sp, dir, files_met) {
+  files_met %>% arrange(GridD) %>%
     mutate(path = file.path(dir, paste0(grid_name,".geo"))) %>%
     magrittr::use_series(path) %>% 
     lapply(read_geo) -> topoR
@@ -1063,32 +1063,33 @@ add_subgroup_lines <- function(inp, lines, subgroup, skip_lines=NULL) {
 
 get_source_elev = function(sources, run_name) {
   sources$base.elevation..msl <- 
-    get_plant_elev(sources, out_files_all %>% filter(run_name == city_sp$run_name))
+    get_plant_elev(sources, nesting_factors %>% filter(run_name == city_sp$run_name))
   sources.out
 }
 
 
-get_recep <- function(casecity,
-                     nesfactL=c(4, 16, 40),
-                     output_dir,
-                     calpuff_exe,
-                     calpuff_template,
-                     out_files_all,
-                     target_crs) {
+get_recep <- function(loc,
+                      files_met,
+                      nesting_factors=c(3, 10, 30),
+                      output_dir,
+                      calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1',
+                      calpuff_template=system.file("extdata", "CALPUFF_7.0_template.INP", package="creapuff"),
+                      nesting_factors,
+                      target_crs) {
   # setwd(calpuffDir)
   
-  run=casecity$run_name
-  files_met = out_files_all %>% subset(run_name == run) %>% arrange(desc(GridD))
+  run=loc$run_name
+  files_met %<>% arrange(desc(GridD))
   inpDir <- files_met$dir[1]
   calmetRes <- files_met$GridD[1] #resolution of the CALMET grid, in km
   calmetXY <- c(X=files_met$GridX[1],Y=files_met$GridY[1]) #origin (LL corner) of CALMET grid
   GridNX <- files_met$GridNX[1]
   GridNY <- files_met$GridNY[1]
   
-  source.id <- casecity$source.name #city_short # LC
-  cluster.center <- casecity %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
+  source.id <- loc$source.name #city_short # LC
+  cluster.center <- loc %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
   
-  for(nesfact in nesfactL) {
+  for(nesfact in nesting_factors) {
     #calculate source position in CALMET grid
     sourceij <- ceiling((cluster.center - calmetXY) / calmetRes) %>% data.frame
     
@@ -1105,8 +1106,7 @@ get_recep <- function(casecity,
     #read CALPUFF.INP template
     files_met %>% 
       make_calpuff_inp(puffrun=source.id,
-                     calpuff_template=calpuff_template,
-                     output_dir=output_dir) %>% 
+                       output_dir=output_dir) %>% 
       readLines -> calpuff_inp
     
     
@@ -1155,7 +1155,7 @@ get_recep <- function(casecity,
   # setwd(inpDir)
   
   #read in and merge files generated above
-  nesfactL %>% 
+  nesting_factors %>% 
     lapply(function(nf) {
       file.path(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
@@ -1163,6 +1163,34 @@ get_recep <- function(casecity,
     }) %>% bind_rows %>% to_spdf(crs=target_crs)
 }
 
+select_receptors <- function(receptors, sources, nesting_factors, nesfact_range) {
+  receptors %<>% do.call(rbind, .)
+  receptors %<>% subset(!duplicated(coordinates(.)))
+  r=raster(extent(receptors), res=1, crs=crs(receptors))
+  
+  runsources$flag=1
+  sourcesR=sources %>% to_spdf %>% spTransform(crs(r)) %>% rasterize(r, 'flag')
+  dist_to_source=distance(sourcesR)
+  extract(dist_to_source, receptors) -> receptors$dist_to_source
+  
+  receptors$include=F
+  
+  for(i in seq_along(nesting_factors))
+    receptors$include[receptors$dist_to_source<nesfact_range[i] & receptors$nesfact==nesting_factors[i]] <- T
+  
+  print(paste(metrun, sum(receptors$include), 'receptors'))
+  if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
+  
+  plotadm = getadm(gis_dir, 0, 'coarse') %>% cropProj(r) # LC : #
+  quickpng(file.path(output_dir, paste0(metrun, ' receptors.png'))  )   
+  receptors %>% subset(include) %>% sp::plot(col='gray', cex=.5)
+  plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
+  
+  runsources %>% sp::plot(add=T)
+  dev.off()
+  
+  return(receptors)
+}
 
 make_topo_rows <- function(topoXYZ) {
   paste0("Disc",1:nrow(topoXYZ),
@@ -1174,7 +1202,7 @@ make_topo_rows <- function(topoXYZ) {
 }
 
 
-get_bg_concs = function(sources, mod_dir) {
+get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background")) {
   
   sources %<>% to_spdf
   #retrieve concentrations from Asia nested runs
