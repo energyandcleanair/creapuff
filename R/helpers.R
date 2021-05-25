@@ -916,7 +916,7 @@ clean_inp <- function(calpuff_inp) {
 
 make_calpuff_inp <- function(files_met,
                              calpuff_template,
-                             output_dir,
+                             output_dir=unique(dirname(files_met$METDAT)),
                              puffrun=NULL,
                              sourceLines=NULL,
                              receptors=NULL,
@@ -932,8 +932,7 @@ make_calpuff_inp <- function(files_met,
   #read CALPUFF.INP
   calpuff_inp <- readLines(calpuff_template)
   
-  metdir=files_met$dir[1] %>% as.character()
-  file_out <- file.path(metdir, puffrun)
+  file_out <- file.path(output_dir, puffrun) %>% gsub('//', '/', .)
   
   files_met %<>% arrange(desc(GridD))
   metrun=files_met$run_name[1] %>% as.character()
@@ -1061,30 +1060,22 @@ add_subgroup_lines <- function(inp, lines, subgroup, skip_lines=NULL) {
 }
 
 
-get_source_elev = function(sources, run_name) {
-  sources$base.elevation..msl <- 
-    get_plant_elev(sources, nesting_factors %>% filter(run_name == city_sp$run_name))
-  sources.out
-}
-
 
 get_recep <- function(loc,
+                      run_name,
                       files_met,
                       nesting_factors=c(3, 10, 30),
-                      output_dir,
+                      output_dir=unique(dirname(files_met$METDAT)),
                       calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1',
-                      calpuff_template=system.file("extdata", "CALPUFF_7.0_template.INP", package="creapuff"),
+                      calpuff_template=system.file("extdata", "CALPUFF_7.0_template_Hg.INP", package="creapuff"),
                       target_crs) {
 
-  run=loc$run_name
   files_met %<>% arrange(desc(GridD))
-  inpDir <- files_met$dir[1]
   calmetRes <- files_met$GridD[1] #resolution of the CALMET grid, in km
   calmetXY <- c(X=files_met$GridX[1],Y=files_met$GridY[1]) #origin (LL corner) of CALMET grid
   GridNX <- files_met$GridNX[1]
   GridNY <- files_met$GridNY[1]
   
-  source.id <- loc$source.name #city_short # LC
   cluster.center <- loc %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
   
   for(nesfact in nesting_factors) {
@@ -1103,7 +1094,8 @@ get_recep <- function(loc,
     
     #read CALPUFF.INP template
     files_met %>% 
-      make_calpuff_inp(puffrun=source.id,
+      make_calpuff_inp(puffrun=run_name,
+                       calpuff_template=calpuff_template,
                        output_dir=output_dir) %>% 
       readLines -> calpuff_inp
     
@@ -1131,31 +1123,30 @@ get_recep <- function(loc,
     set_puff(calpuff_inp, params) -> calpuff_inp
     
     #write into file
-    outinp <- file.path(output_dir, paste0(source.id,"_elevgen_CALPUFF_7.0.inp"))
+    calpuff_dir <- dirname(calpuff_exe)
+    outinp <- file.path(calpuff_dir, paste0(run_name,"_elevgen_CALPUFF_7.0.inp"))
     writeLines(calpuff_inp, outinp)  
     
     org_dir <- getwd()
-    # calpuff_dir <- dirname(calpuff_exe)
-    setwd(output_dir)
+    setwd(calpuff_dir)
     
     #run CALPUFF setup to generate receptor grid  
-    # file.rename("qarecg.dat","qarecg_backup.dat")
-    system2(calpuff_exe, args=outinp)
+    system2(basename(calpuff_exe), args=basename(outinp))
     
     #rename receptor file and move to input directory
-    file.rename("qarecg.dat", paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_"))
+    file.rename(file.path(calpuff_dir, "qarecg.dat"), 
+                file.path(output_dir, paste(run_name,'nesfact',nesfact,"qarecg.dat",sep="_")))
     
     setwd(org_dir)
   }
   
   
   ##read the receptor file written by CALPUFF and generate nested grids of discrete receptors
-  # setwd(inpDir)
   
   #read in and merge files generated above
   nesting_factors %>% 
     lapply(function(nf) {
-      file.path(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
+      file.path(output_dir, paste(run_name,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
         mutate(nesfact=nf)
     }) %>% bind_rows %>% to_spdf(crs=target_crs)
@@ -1200,9 +1191,9 @@ make_topo_rows <- function(topoXYZ) {
 }
 
 
-get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background")) {
-  
-  sources %<>% to_spdf
+get_bg_concs = function(locs, mod_dir=file.path(get_gis_dir(), "background")) {
+  if(is.null(locs$ID)) locs$ID <- 1:nrow(locs)
+  locs %<>% to_spdf
   #retrieve concentrations from Asia nested runs
   #file names
   files_bg <- list("Max_8-hour_ozone" = "present_mda8.nc",
@@ -1245,7 +1236,7 @@ get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background"))
                           ymin-yres/2,
                           ymax+yres/2))
     
-    raster::extract(r, sources) -> conc
+    raster::extract(r, locs) -> conc
     
     conc %>% 
       multiply_by(scaling[i]) %>% 
@@ -1262,8 +1253,8 @@ get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background"))
   
   if(length(miss)>0) {
     file.path(mod_dir, 'Geos-Chem_v8-02-04-geos5-Run2_bgconcs.grd') %>% 
-      stack %>% raster::extract(sources[miss, ]) %>% 
-      data.frame(sources@data[miss, ], .) %>% 
+      stack %>% raster::extract(locs[miss, ]) %>% 
+      data.frame(locs@data[miss, ], .) %>% 
       gather(var, val, contains("_M")) %>% 
       separate('var', c('spec', 'M')) %>% 
       spread(M, val) -> globconcs
@@ -1276,10 +1267,10 @@ get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background"))
       round(3) %>% 
       apply(1, paste, collapse=", ") -> globconcs$str
     
-    globconcs %<>% dlply(.(spec))
+    globconcs %<>% plyr::dlply(plyr::.(spec))
     
     for(s in spec) {
-      ind <- match(sources$city[miss], globconcs[[s]]$city)
+      ind <- match(locs$ID[miss], globconcs[[s]]$ID)
       concs[[s]][miss] <- globconcs[[s]]$str[ind]
     } 
   }
@@ -1287,8 +1278,8 @@ get_bg_concs = function(sources, mod_dir=file.path(get_gis_dir(), "background"))
   
   concs %>% set_names(spec) %>% 
     lapply(data.frame) %>% lapply(set_names, 'str') %>% 
-    lapply(data.frame, sources@data) %>% 
-    ldply(.id='spec') %>% 
+    lapply(data.frame, locs@data) %>% 
+    bind_rows(.id='spec') %>% 
     spread(spec, str)
 }
 
