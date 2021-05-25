@@ -90,8 +90,8 @@ runCalpuff <- function(
   sources$Long %<>% as.numeric()
   
   #exclude sources outside domain  -Lauri
-  domPols = gridsToDomPols(grids, target_crs)
-  sources %<>% to_spdf %>% crop(spTransform(domPols, crs(.))) %>% '@'('data')
+  domains <- grids_to_domains(grids, target_crs)
+  sources %<>% to_spdf %>% crop(spTransform(domains, crs(.))) %>% '@'('data')
   
   sources$source.name <- sources$scenario # LC
   sources$puffrun <- sources$scenario
@@ -123,12 +123,12 @@ runCalpuff <- function(
     
     outF = sources %>% filter(source.name == run) %>% head(1)
     
-    target_crs = getUTMproj(outF$UTMZ, outF$UTMH)
+    target_crs = get_utm_proj(outF$UTMZ, outF$UTMH)
     
     loc = outF %>% to_spdf %>% spTransform(target_crs)
     
     #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
-    getRecep(loc,
+    get_recep(loc,
               nesfactL=nesfactL,
               output_dir=output_dir,
               calpuff_exe=calpuff_exe,
@@ -139,7 +139,7 @@ runCalpuff <- function(
     print(run)
   }
   
-  bgconcs = getBgconcs(sources,  mod_dir=file.path(gis_dir, "background"))
+  bgconcs = get_bg_concs(sources,  mod_dir=file.path(gis_dir, "background"))
   
   o3dat = NULL #NULL : hourly Ozone Data File (Optional). No ozone monitoring stations, in both PH or Vietnam
   
@@ -156,11 +156,11 @@ runCalpuff <- function(
     sources %>% filter(run_name == metrun) %>% to_spdf -> runsources
     files_met <- out_files_all %>% filter(run_name == unique(runsources$run_name))
     
-    targetcrs = getUTMproj(files_met$UTMZ[1], files_met$UTMH[1])
+    targetcrs = get_utm_proj(files_met$UTMZ[1], files_met$UTMH[1])
     runsources %<>% spTransform(targetcrs)
     runsources %>% coordinates() %>% data.frame() %>% 
       set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
-    runsources$base.elevation..msl <- getPlantElev(runsources,
+    runsources$base.elevation..msl <- get_plant_elev(runsources,
                                                    dir=output_dir,
                                                    out_files=files_met)
     
@@ -228,14 +228,14 @@ runCalpuff <- function(
     addparams = list(DATUM="WGS-84")
     
     for(puffrun in runsources$source.name) {
-      makeCalpuffInp(files_met,
+      make_calpuff_inp(files_met,
                        calpuff_template=calpuff_template,
                        output_dir=output_dir,
                        puffrun=puffrun,
                        bgconcs = bgconcs[bgconcs$puffrun == puffrun,],
                        OZONE.DAT = o3dat,
                        sourceLines=sourceLines[[puffrun]],
-                       receptors=intopo %>% subset(include) %>% makeToporows,
+                       receptors=intopo %>% subset(include) %>% make_topo_rows,
                        addparams = addparams,
                        addsubgroups = NULL) ->
         inpfiles_created[[puffrun]]

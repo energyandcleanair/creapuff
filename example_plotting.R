@@ -1,12 +1,15 @@
 #set up the environment
 remotes::install_github("energyandcleanair/creapuff", ref="main", dependencies=T, update=T)
+remotes::install_github("energyandcleanair/creahelpers")
+
 library(creapuff)
+library(creahelpers)
 require(tidyverse)
 
 output_dir <- "F:/TAPM/Sekong/results" # Where to write all generated files
-creahia::set_env('gis_dir',"~/GIS/")
-Sys.setenv(gis_dir="~/GIS/")
-
+# creahia::set_env('gis_dir',"~/GIS/")
+# Sys.setenv(gis_dir="~/GIS/")
+gis_dir = "C:\\Users\\lauri\\Documents\\GIS"
 setwd(get_gis_dir())
 system("gsutil rsync -r gs://crea-data/gis .")
 
@@ -14,7 +17,7 @@ system("gsutil rsync -r gs://crea-data/gis .")
 calpuff_files <- creapuff::get_calpuff_files(ext=".csv", gasunit = 'ug', dir=output_dir)
 
 #set up plotting grid and output interpolated rasters
-calpuff_files %>% get_grids_calpuff(utm_zone = 48, utm_hem = 'N') -> grids
+calpuff_files %>% get_grids_calpuff(utm_zone = 48, utm_hem = 'N', map_res_km=5) -> grids
 calpuff_files %>% make_tifs(grids=grids)
 
 #list generated tif files
@@ -34,7 +37,7 @@ calpuff_files %>% dplyr::filter(type=='deposition', !grepl('sekong', scenario)) 
 calpuff_files <- get_calpuff_files(ext=".tif", gasunit = 'ug', dir=output_dir)
 
 #read list of modeled plants
-plants <- readxl::read_xlsx('~/CALPUFF/Sekong coal plant emissions data.xlsx', skip=1, n_max=3)
+plants <- readxl::read_xlsx('C:\\Users\\lauri\\Documents\\CALPUFF/Sekong coal plant emissions data.xlsx', skip=1, n_max=3)
 
 #give names to scenarios
 calpuff_files %<>% dplyr::mutate(scenarioName = dplyr::recode(scenario, 
@@ -71,8 +74,7 @@ plot_results(calpuff_files,
              get_plants = get_plants,
              zipping_function=zipping_function)
 
-#get WDPA protected areas
-wdpa_areas=crea_helpers::get_wdpa(grids)
 
 #output deposition results
-get_deposition_results(calpuff_files, dir=output_dir, wdpa_areas=wdpa_areas) -> depo
+depo <- get_deposition_results(calpuff_files,
+                       dir=output_dir)

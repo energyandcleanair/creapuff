@@ -81,7 +81,7 @@ runPostprocessing <- function(
     
     for(p in 1:nrow(inparams)) {
       puffInp %>% gsub(" ", "", .) %>% 
-        getParamVal(params$cpuname[p], .) -> params$val[p]
+        get_param_val(params$cpuname[p], .) -> params$val[p]
     }
     
     params$val[params$name == 'ISHR'] %<>% as.numeric %>% add(2)
@@ -98,17 +98,17 @@ runPostprocessing <- function(
     params[nrow(params)+1,] <- c('UTLDAT', gsub("\\.CON", "_repart.CON", conF))
     params[nrow(params)+1,] <- c('NPER', nper)
     #write repartitioning INP file
-    writeInp(pu_templates[1], 
+    write_input(pu_templates[1], 
               file.path(output_dir, paste0(run_name, pu.inp.out[1])),
               params)
     
-    #writeInp file to calculate total PM
+    #write_input file to calculate total PM
     params[params$name == 'MODDAT', 'val'] <- params[params$name == 'UTLDAT', 'val']
     params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_TotalPM.CON", conF)
     params[params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
     params[!(params$name %in% c('BCKNH3', 'UTLMET')), ] -> params
     
-    writeInp(pu_templates[3], 
+    write_input(pu_templates[3], 
               file.path(output_dir, paste0(run_name, pu.inp.out[3])),
               params)
     
@@ -119,7 +119,7 @@ runPostprocessing <- function(
     params[params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
     
     params[nrow(params)+1,] <- c('MODDAT', gsub("\\.CON", ".DRY", conF))
-    writeInp(pu_templates[2], 
+    write_input(pu_templates[2], 
               pu.depo.out,
               params)
     
@@ -160,8 +160,8 @@ runPostprocessing <- function(
     params[nrow(params)+1,] <- c("L24HR", "T, T, T, T")
     params[nrow(params)+1,] <- c("LD", discrete_receptors %>% as.character %>% substr(1,1))
     
-    #writeInp file to get all concentration outputs
-    writeInp(calpost_templates[1], 
+    #write_input file to get all concentration outputs
+    write_input(calpost_templates[1], 
               file.path(output_dir, paste0(run_name, cp.inp.out[1])),
               params,
               set.all=F)
@@ -169,9 +169,9 @@ runPostprocessing <- function(
     params$val[params$name=="L1HR"] <- "F, F, F"
     params$val[params$name=="L24HR"] <- "F, F, F"
     
-    #writeInp file to get all deposition outputs
+    #write_input file to get all deposition outputs
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
-    writeInp(calpost_templates[2], 
+    write_input(calpost_templates[2], 
               file.path(output_dir, paste0(run_name, cp.inp.out[2])),
               params,
               set.all=F)
