@@ -1075,8 +1075,7 @@ get_recep <- function(loc,
                       calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1',
                       calpuff_template=system.file("extdata", "CALPUFF_7.0_template.INP", package="creapuff"),
                       target_crs) {
-  # setwd(calpuffDir)
-  
+
   run=loc$run_name
   files_met %<>% arrange(desc(GridD))
   inpDir <- files_met$dir[1]
