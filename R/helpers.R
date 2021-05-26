@@ -950,7 +950,7 @@ make_calpuff_inp <- function(files_met,
   addparams$NMETDAT = nrow(files_met)
   
   if(nrow(files_met) == 1)
-    addparams$METDAT = file.path(metdir, paste0(files_met$grid_name,"_CALMET.DAT"))
+    addparams$METDAT = file.path(output_dir, paste0(files_met$grid_name,"_CALMET.DAT")) %>% gsub('//', '/', .)
   
   if(is.null(files_met$grid_name)) stop('grid_name cannot be NULL')
   for(r in 1:5) {
@@ -963,7 +963,8 @@ make_calpuff_inp <- function(files_met,
     addparams[[paste0('METDAT',r)]] <- 
       ifelse(gridLevelAvailable,
              file.path(files_met[r, "dir"],
-                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")),
+                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")) %>% 
+               gsub('//', '/', .),
              "not set")
   }
   
@@ -996,7 +997,7 @@ make_calpuff_inp <- function(files_met,
   if(!is.null(receptors))   addsubgroups %<>% c(list(X20c = receptors))
   
   for(sg in names(addsubgroups))
-    calpuff_inp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=grm(sg, "^X"))
+    calpuff_inp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=gsub("^X", "", sg))
   
   #write into file
   outF <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp"))
@@ -1035,7 +1036,7 @@ read_geo <- function(geoPath) {
 }
 
 
-get_plant_elev <- function(sources.sp, dir, files_met) {
+get_plant_elev <- function(sources.sp, files_met, dir=unique(files_met$dir)) {
   files_met %>% arrange(GridD) %>%
     mutate(path = file.path(dir, paste0(grid_name,".geo"))) %>%
     magrittr::use_series(path) %>% 
@@ -1066,7 +1067,7 @@ get_recep <- function(loc,
                       files_met,
                       nesting_factors=c(3, 10, 30),
                       output_dir=unique(dirname(files_met$METDAT)),
-                      calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1',
+                      calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe',
                       calpuff_template=system.file("extdata", "CALPUFF_7.0_template_Hg.INP", package="creapuff"),
                       target_crs) {
 
@@ -1124,18 +1125,19 @@ get_recep <- function(loc,
     
     #write into file
     calpuff_dir <- dirname(calpuff_exe)
-    outinp <- file.path(calpuff_dir, paste0(run_name,"_elevgen_CALPUFF_7.0.inp"))
+    outinp <- file.path(output_dir, paste0(run_name,"_elevgen_CALPUFF_7.0.inp"))
     writeLines(calpuff_inp, outinp)  
     
     org_dir <- getwd()
-    setwd(calpuff_dir)
+    setwd(output_dir)
     
     #run CALPUFF setup to generate receptor grid  
-    system2(basename(calpuff_exe), args=basename(outinp))
+    system2(calpuff_exe, args=outinp) -> exit_code
+    if(exit_code != 0) stop("errors in CALPUFF execution")
     
     #rename receptor file and move to input directory
-    file.rename(file.path(calpuff_dir, "qarecg.dat"), 
-                file.path(output_dir, paste(run_name,'nesfact',nesfact,"qarecg.dat",sep="_")))
+    file.rename("qarecg.dat", 
+                paste(run_name,'nesfact',nesfact,"qarecg.dat",sep="_"))
     
     setwd(org_dir)
   }
@@ -1152,12 +1154,12 @@ get_recep <- function(loc,
     }) %>% bind_rows %>% to_spdf(crs=target_crs)
 }
 
-select_receptors <- function(receptors, sources, nesting_factors, nesfact_range) {
-  receptors %<>% do.call(rbind, .)
+select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_factors, nesfact_range, files_met) {
+  if(is.list(receptors)) receptors %<>% do.call(rbind, .)
   receptors %<>% subset(!duplicated(coordinates(.)))
   r=raster(extent(receptors), res=1, crs=crs(receptors))
   
-  runsources$flag=1
+  sources$flag=1
   sourcesR=sources %>% to_spdf %>% spTransform(crs(r)) %>% rasterize(r, 'flag')
   dist_to_source=distance(sourcesR)
   extract(dist_to_source, receptors) -> receptors$dist_to_source
@@ -1167,15 +1169,15 @@ select_receptors <- function(receptors, sources, nesting_factors, nesfact_range)
   for(i in seq_along(nesting_factors))
     receptors$include[receptors$dist_to_source<nesfact_range[i] & receptors$nesfact==nesting_factors[i]] <- T
   
-  print(paste(metrun, sum(receptors$include), 'receptors'))
+  print(paste(run_name, sum(receptors$include), 'receptors'))
   if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
   
-  plotadm = getadm(gis_dir, 0, 'coarse') %>% cropProj(r) # LC : #
-  quickpng(file.path(output_dir, paste0(metrun, ' receptors.png'))  )   
+  plotadm = creahelpers::get_adm(0, 'coarse') %>% cropProj(r)
+  quickpng(file.path(output_dir, paste(run_name, 'receptors.png'))  )   
   receptors %>% subset(include) %>% sp::plot(col='gray', cex=.5)
   plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
   
-  runsources %>% sp::plot(add=T)
+  sources %>% sp::plot(add=T)
   dev.off()
   
   return(receptors)
