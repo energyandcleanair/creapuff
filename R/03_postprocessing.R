@@ -47,7 +47,7 @@ runPostprocessing <- function(
   #generate POSTUTIL and CALPOST .inp files
   pu.inp.out <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
   cp.inp.out <- calpost_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
-  
+
   #read CALPUFF.INP
   puffInp <- readLines(calpuff_inp)
   
@@ -83,7 +83,7 @@ runPostprocessing <- function(
   message(paste("output dir:", output_dir))
   
   conF <- params$val[params$name=='MODDAT']
-  
+
   #calculate POSTUTIL time period if not set
   if(is.null(pu_start_hour)) {
     params$val[params$name == 'ISHR'] %<>% as.numeric %>% add(2)
@@ -146,10 +146,9 @@ runPostprocessing <- function(
     writeLines(pu.depo, pu.depo.out)
   }
 
-  
   #make CALPOST INP files
   cp.period = cp_period_function(params)
-  
+
   params %<>% subset(name == 'ABTZ')
   params[nrow(params)+1,] <- c('METRUN', METRUN)
   
