@@ -34,6 +34,7 @@ make_titletxt = function(calpuff_files) {
 #'
 #' @examples
 plot_results <- function(calpuff_files,
+                         scenario_names = calpuff_files$scenarioName,
                          dir=dirname(calpuff_files$path[1]),
                          map_res=1,
                          plants=NULL,
@@ -75,8 +76,9 @@ plot_results <- function(calpuff_files,
   adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
 
   expPop <- list()
-  popCP = write_conc_kml(grids=grids)
+  popCP = make_pop(grids = grids)
   
+  calpuff_files$scenarioName <- scenario_names
   if(is.null(calpuff_files$scenarioName)) calpuff_files$scenarioName <- calpuff_files$scenario
   
   if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
