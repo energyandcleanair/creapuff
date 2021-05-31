@@ -1,4 +1,4 @@
-get_deposition_results <- function(calpuff_files, dir, add_wdpa_areas=T){
+get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL){
   #deposition totals
   calpuff_files %>% subset(type=='deposition') -> depodf
   depodf$path %>% stack %>% fixproj -> depoR
@@ -40,10 +40,15 @@ get_deposition_results <- function(calpuff_files, dir, add_wdpa_areas=T){
   deposums %>% write.csv(file.path(dir, 'deposition by broad land use category.csv'))
   
   protdepo=NULL
-  if(add_wdpa_areas) {
-    
-    grids <- get_grids_calpuff(calpuff_files)
-    get_wdpa_areas(grids)
+  
+  if(is.logical(wdpa_areas)) {
+    if(wdpa_areas) {
+      grids <- get_grids_calpuff(calpuff_files)
+      wdpa_areas <- get_wdpa_areas(grids)
+    } else  wdpa_areas <- NULL
+  }
+  
+  if(!is.null(wdpa_areas)) {
     
     #WDPA database extract
     units = ifelse(grepl('hg', names(depoR)), 'mg', 'kg')
