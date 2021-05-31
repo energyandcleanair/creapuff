@@ -379,7 +379,7 @@ get_wdpa_areas <- function(grids){
 #' @export
 #'
 #' @examples
-get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
+get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   
   ext <- gsub("^\\.","\\\\.",ext)
   files <- list.files(path=dir, pattern=paste0("rank.*",ext), full.names = T)
@@ -397,7 +397,8 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
   calpuff_files[grep("tflx",calpuff_files$name),"scale"] <- 8760*3600/1e9*1e4
   calpuff_files[grep("tflx",calpuff_files$name),"unit"] <- "kg/ha/yr"
   
-  calpuff_files[calpuff_files$species == 'hg','scale'] <- calpuff_files[calpuff_files$species == 'hg','scale'] * 1e3
+  calpuff_files[calpuff_files$species == 'hg','scale'] %<>% multiply_by(1e6 * hg_scaling)
+  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in kg in CALPUFF.'))
   calpuff_files[calpuff_files$species == 'hg','unit'] <- "mg/ha/yr"
   
   calpuff_files$hr <- as.numeric(gsub("[_hr]","",calpuff_files$hr))
