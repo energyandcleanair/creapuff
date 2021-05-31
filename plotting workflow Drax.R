@@ -51,7 +51,11 @@ plot_results(calpuff_files,
 )
 
 #get WDPA protected areas
-get_wdpa_for_grid(grids) -> wdpa_areas
+grids_wdpa <- grids
+grids_wdpa$gridR %<>% (function(x) {crop(x, extent(x)*.33)})
+get_wdpa_for_grid(grids_wdpa) -> wdpa_areas
+saveRDS(file.path(output_dir, 'WDPA areas.RDS'))
 
 #output deposition results
 get_deposition_results(calpuff_files, dir=output_dir, wdpa_areas=wdpa_areas) -> depo
+
