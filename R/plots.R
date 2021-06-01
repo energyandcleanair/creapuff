@@ -208,8 +208,9 @@ plot_results <- function(calpuff_files,
         contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
         outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
         
-        colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
         
+        colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
+        plotKML.env(colour_scale_numeric = yorb)
         
         png(file.path(dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
         
@@ -231,12 +232,12 @@ plot_results <- function(calpuff_files,
         
         kml_file <- file.path(dir, paste0(outL,".kml"))
         kmz_file <- file.path(dir, paste0(outL,".kmz"))
-        colour <- rank(contP@data$max)
+        contP$colour_index <- rank(contP@data$max)
         kml_open(kml_file)
         kml_layer(obj=contP,
                   subfolder.name=calpuff_files[file,"unit"],
-                  # colour=colour, #TODO NOT SURE WHY IT DOESN'T WORK
-                  colour_scale=yorb,
+                  colour=colour_index, 
+                  #colour_scale=yorb,
                   alpha=0.5,
                   altitude=0,
                   plot.labpt=F,
