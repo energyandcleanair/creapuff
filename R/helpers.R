@@ -389,6 +389,19 @@ get_grids_calpuff <- function(calpuff_files,
               "gridLL"=gridLL))
 }
 
+#wrapper for readPuffInp that returns the CRS and grid properties
+get_grid_from_calpuff.inp <- function(scenarios=NULL,
+                                      dir="C:/CALPUFF/CALPUFF_v7.2.1_L150618",
+                                      filename_suffix="_CALPUFF_7.0.inp",
+                                      file_paths=file.path(dir, paste0(scenarios, filename_suffix)),
+                                      params_to_read = c('IUTMZN','UTMHEM','XORIGKM','YORIGKM','DGRIDKM','NX','NY'),
+                                      ...) {
+  if(is.null(scenarios)) scenarios <- file_path %>% basename %>% gsub(filename_suffix, '', .)
+  file_paths %>%
+    lapply(creapuff::readPuffInp, ...) %>%
+    lapply('[', params_to_read) %>%
+    lapply(data.frame) %>% bind_rows %>% tibble(scenario=scenarios, .)
+}
 
 
 
