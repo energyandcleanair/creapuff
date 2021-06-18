@@ -1,5 +1,5 @@
-#remotes::install_github("energyandcleanair/creapuff", dependencies=T, update=F)
-#devtools::reload(pkgload::inst("creapuff"))
+# remotes::install_github("energyandcleanair/creapuff", dependencies=T, update=F)
+# devtools::reload(pkgload::inst("creapuff"))
 library(creapuff)
 
 # Parameters --------------------------------------------------------------
@@ -9,11 +9,9 @@ expand_grids = F #'none'
 input_xls <- file.path("Z:/projects/chile/ChileClusters.xlsx")
 output_dir <- "Z:/projects/chile/calpuff_suite" # Where to write all generated files
 wrf_dir <-"Z:/projects/chile/calwrf"            # Where calwrf data are stored
-#wrf_dir <-"F:/TAPM/chileWRF"                    # Debug directory for calwrf data
-
 
 # General parameters
-gis_dir <- "F:/gis/" # The folder where we store general GIS data
+gis_dir <- "F:/gis/"                            # The folder where we store general GIS data
 
 calmet_exe <- "C:/CALPUFF/CALMET_v6.5.0_L150223/calmet_v6.5.0.exe"
 calmet_templates <- list(noobs="F:/templates/CALMET_template.INP", 
@@ -47,7 +45,7 @@ calmet_result <- creapuff::runCalmet(
   only_make_additional_files=F,  # F
   run_calmet = T  # T
 )
-browser()
+
 # CALPUFF -----------------------------------------------------------------
 
 calpuff_result <- creapuff::runCalpuff(
