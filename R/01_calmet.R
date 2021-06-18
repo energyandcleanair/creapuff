@@ -40,7 +40,6 @@ runCalmet <- function(
   gis_dir %<>% normalizePath()
   calmet_exe %<>% normalizePath()
 
-
   # WRF ---------------------------------------------------------------------
   wd_org <- getwd()
   setwd(output_dir)
@@ -49,12 +48,11 @@ runCalmet <- function(
   m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F)
   if(length(m3d)==0) stop(sprintf("no .m3d file in %s",wrf_dir))
   m3d %<>% strsplit('_') %>% ldply %>%
-    set_names(c('run_name','grid_name','date')) %>%
+    set_names(c('run_name','grid_name','filename_start_date','filename_end_date')) %>%
     tibble(path=file.path(wrf_dir, m3d), .)
-  m3d$date %<>% gsub(".m3d","",.) 
-  last_date <- m3d$date[length(m3d$date) -1] %>% paste(.,"23", sep = " ") # LC. LastDate is the day before the last file
-  
-  end_date = ymd_h(last_date) # LC
+  m3d$filename_start_date %<>% gsub(".m3d","",.) %>% paste(.,"00", sep = " ") %>%  ymd_h  # LC
+  m3d$filename_end_date %<>% gsub(".m3d","",.) %>% paste(.,"23", sep = " ") %>%  ymd_h  # LC
+  end_date <- m3d$filename_end_date[length(m3d$filename_end_date)]  # LC
   run_name <- m3d$run_name[1] # LC
   
   #build a data frame with the header info from all files
@@ -103,9 +101,10 @@ runCalmet <- function(
   for(g in seq_along(m3d_grid)) {
     grid_name = names(m3d_grid)[g]
     res = m3d$d[m3d$grid_name==grid_name][1]
+    reduction_degs = 5*res/100  # LC : the first 5 cells in each direction (used to nudge towards boundary conditions) are neglected
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
                          res/100, 0)
-    m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
+    m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% subtract(reduction_degs) %>% 
       as('SpatialPolygons') -> lldomain # Non-skewed domain, in the original ll rcs
     crs(lldomain) <- creapuff.env$llproj
     lldomain %>% spTransform(target_crs) -> lldomain_utm # LC : Skewed domain, in the UTM crs
@@ -115,13 +114,11 @@ runCalmet <- function(
     contains <- F
     
     while(!contains) {
-      # LC : reduction of non-skewed and bigger domain to completely fits within the original skewed domain  
+      # reduction of non-skewed and bigger domain to completely fits within the original skewed domain  
       bb %>% subtract(shrink) -> bb_new 
       bb_new %>% as('SpatialPolygons') -> utmdomain
       crs(utmdomain) <- target_crs
-      # spplot(lldomain_utm,sp.layout = utmdomain)
-      # plot(lldomain_utm,col='red',lwd=3)
-      # plot(utmdomain,add=TRUE,border='green',lwd=3)
+      # spplot(lldomain_utm,sp.layout = utmdomain) # LC : for plotting and check
       contains <- lldomain_utm %>% gContains(utmdomain) # lldomain_utm (g)Contains utmdomain? If NO, continue reduction
       shrink %<>% add(step)
     }
@@ -130,7 +127,7 @@ runCalmet <- function(
   }
   
   #create polygons of grid boundaries for plotting
-  domPols = gridsToDomPols(grids, target_crs)
+  domPols = grids_to_domains(grids, target_crs)
   
   #admin boundaries for plotting
   get_adm(level=0, res='low') %>% cropProj(domPols) -> admUTM
@@ -142,9 +139,9 @@ runCalmet <- function(
   ggplot() + annotation_spatial(admUTM) + layer_spatial(domPols, fill=NA) +
     theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 
     annotation_spatial(sources, col='orange')
-  ggsave(file.path(output_dir, paste(run_name, 'domains.png')))
+  ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
   
-  surf.dat <- NA #NA : don't make SURF.DAT and run without it. 
+  surf.dat <- NA  # NA : don't make SURF.DAT and run without it. 
   
   #make GEO.DAT and CALMET.INP files
   params_allgrids <- list()
@@ -160,12 +157,17 @@ runCalmet <- function(
       start_date %<>% add(as.difftime(1, units='days'))
       hour(start_date)=0
     }
+    #end_date   = m3d$filename_end_date [m3d$grid_name==grid_name][length(m3d$grid_name==grid_name)] + as.difftime(TZ, units='hours') # LC
+    #if(hour(end_date)>5) {  # LC
+    #  end_date %<>% add(as.difftime(1, units='days'))  # LC
+    #  hour(end_date)=0  # LC
+    #}
     
     nx = ncol(gridR)
     ny = nrow(gridR)
     bb = extent(gridR)
     
-    # LC : make GEO.DAT -> grid_name.geo file (in output dir: working dir)
+    # make GEO.DAT -> grid_name.geo file (in output dir: working dir). Skip it with --> only_make_additional_files=T
     geo.file=file.path(output_dir, paste0(grid_name, '.geo'))
     if(!file.exists(geo.file) | !only_make_additional_files) {
       zoom=8-floor(log(res)/log(2))
@@ -207,14 +209,14 @@ runCalmet <- function(
       geo.out = c(geo.header, geo.lu, '1.0', geo.elev, rep(0, 6))
       geo.out %>% writeLines(geo.file)
       
-      quickpng(file.path(output_dir, paste(grid_name, 'terrain.png')))
+      quickpng(file.path(output_dir, paste0(grid_name, '_', 'terrain.png')))
       levelplot(elev.out, col.regions=c('steelblue', terrain.colors(255)), margin=F, 
                 main='Terrain elevations') -> p
       print(p)
       dev.off()
       
       values(lu.out) <- lc_codes$LCCOwnLabel[match(lu.out[], lc_codes$USGS.code)] %>% as.factor()
-      quickpng(file.path(output_dir, paste(grid_name, 'land use.png')))
+      quickpng(file.path(output_dir, paste0(grid_name, '_', 'landuse.png')))
       levelplot(lu.out,main='Land use', 
                 col.regions=brewer.pal(12, 'Paired')[rev(c(1, 10, 4, 8, 3, 7))]) -> p
       print(p)
@@ -267,7 +269,7 @@ runCalmet <- function(
     
     # LC : make CALMET.INP (in CALMET dir)
     calmet_templates$noobs %>% readLines -> calmetinp
-    setPuff(calmetinp, params) -> inp.out
+    set_puff(calmetinp, params) -> inp.out
     
     #add all m3d files
     m3d_loc = grep('M3DDAT', inp.out)
