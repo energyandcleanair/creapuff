@@ -4,9 +4,10 @@
 #'
 #' @param input_xls
 #' @param wrf_dir directory where to find m3d files
-#' @param expand_grids regex string - if grid name matches, the scripts attempts to expand the grid to get max domain size
+#' @param expand_grids regex string - if grid name matches, the scripts attempts to expand the grid
+#' @param expand_ncells number of cells to expand the selected grid(s) in each direction (use negative values to crop domain area)
 #' @param output_dir directory where to write generated input and bat files
-#' @param gis_folder  directory where to find land cover files
+#' @param gis_folder directory where to find land cover files
 #' @param calmet_exe filepath (full) of CALMET exe
 #' @param calmet_templates (list) list with noobs and surfobs template full file paths
 #' @param only_make_additional_files F: make files anyway and do not skip; T: skip if output file already exists
@@ -21,6 +22,7 @@ runCalmet <- function(
   input_xls,
   wrf_dir,
   expand_grids,
+  expand_ncells,
   output_dir,
   gis_dir,
   calmet_exe,
@@ -101,10 +103,9 @@ runCalmet <- function(
   for(g in seq_along(m3d_grid)) {
     grid_name = names(m3d_grid)[g]
     res = m3d$d[m3d$grid_name==grid_name][1]
-    reduction_degs = 5*res/100  # LC : the first 5 cells in each direction (used to nudge towards boundary conditions) are neglected
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
-                         res/100, 0)
-    m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% subtract(reduction_degs) %>% 
+                         2*expand_ncells*res/100, 0)
+    m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
       as('SpatialPolygons') -> lldomain # Non-skewed domain, in the original ll rcs
     crs(lldomain) <- creapuff.env$llproj
     lldomain %>% spTransform(target_crs) -> lldomain_utm # LC : Skewed domain, in the UTM crs
@@ -297,13 +298,13 @@ runCalmet <- function(
     start_date -> start_dates[[grid_name]]
   }
   
-  saveRDS(params_allgrids, file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
-  
   # Results needed for CALPUFF
   result$run_name <- run_name
   result$grids <- grids
   result$params <- params_allgrids
   result$start_dates <- start_dates
+  
+  saveRDS(result, file.path(output_dir, paste0('calmet_result', '.RDS')))
   
   return(result)
 }
