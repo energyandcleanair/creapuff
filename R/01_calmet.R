@@ -158,12 +158,8 @@ runCalmet <- function(
       start_date %<>% add(as.difftime(1, units='days'))
       hour(start_date)=0
     }
-    #end_date   = m3d$filename_end_date [m3d$grid_name==grid_name][length(m3d$grid_name==grid_name)] + as.difftime(TZ, units='hours') # LC
-    #if(hour(end_date)>5) {  # LC
-    #  end_date %<>% add(as.difftime(1, units='days'))  # LC
-    #  hour(end_date)=0  # LC
-    #}
-    
+    end_date   = tail(m3d$filename_end_date [m3d$grid_name==grid_name],n=1) + as.difftime(TZ, units='hours') # LC, CHECK
+
     nx = ncol(gridR)
     ny = nrow(gridR)
     bb = extent(gridR)
