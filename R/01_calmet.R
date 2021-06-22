@@ -106,10 +106,10 @@ runCalmet <- function(
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
                          2*expand_ncells*res/100, 0)
     m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
-      as('SpatialPolygons') -> lldomain # Non-skewed domain, in the original ll rcs
+      as('SpatialPolygons') -> lldomain  # Non-skewed domain, in the original ll rcs
     crs(lldomain) <- creapuff.env$llproj
-    lldomain %>% spTransform(target_crs) -> lldomain_utm # LC : Skewed domain, in the UTM crs
-    lldomain_utm %>% extent -> bb # LC : Non-skewed rectangular boundary, with larger area than skewed domain
+    lldomain %>% spTransform(target_crs) -> lldomain_utm  # Skewed domain, in the UTM crs
+    lldomain_utm %>% extent -> bb  # Non-skewed rectangular boundary, with larger area than skewed domain
     step <- res/10
     shrink <- 0
     contains <- F
@@ -119,8 +119,8 @@ runCalmet <- function(
       bb %>% subtract(shrink) -> bb_new 
       bb_new %>% as('SpatialPolygons') -> utmdomain
       crs(utmdomain) <- target_crs
-      # spplot(lldomain_utm,sp.layout = utmdomain) # LC : for plotting and check
-      contains <- lldomain_utm %>% gContains(utmdomain) # lldomain_utm (g)Contains utmdomain? If NO, continue reduction
+      # spplot(lldomain_utm,sp.layout = utmdomain)  # If needed, to plot and check
+      contains <- lldomain_utm %>% gContains(utmdomain)  # lldomain_utm (g)Contains utmdomain? If NO, continue reduction
       shrink %<>% add(step)
     }
     
@@ -128,16 +128,16 @@ runCalmet <- function(
   }
   
   #create polygons of grid boundaries for plotting
-  domPols = grids_to_domains(grids, target_crs)
+  dom_pols = grids_to_domains(grids, target_crs)
   
   #admin boundaries for plotting
-  get_adm(level=0, res='low') %>% cropProj(domPols) -> admUTM
+  get_adm(level=0, res='low') %>% cropProj(dom_pols) -> admUTM
   
   #plot sources and domains
   read_xlsx(input_xls, sheet='CALPUFF input') %>% 
     mutate_at(c('Lat', 'Long'), as.numeric) %>% to_spdf -> sources
   
-  ggplot() + annotation_spatial(admUTM) + layer_spatial(domPols, fill=NA) +
+  ggplot() + annotation_spatial(admUTM) + layer_spatial(dom_pols, fill=NA) +
     theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 
     annotation_spatial(sources, col='orange')
   ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
