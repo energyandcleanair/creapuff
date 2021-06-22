@@ -128,16 +128,16 @@ runCalmet <- function(
   }
   
   #create polygons of grid boundaries for plotting
-  domPols = grids_to_domains(grids, target_crs)
+  dom_pols = grids_to_domains(grids, target_crs)
   
   #admin boundaries for plotting
-  get_adm(level=0, res='low') %>% cropProj(domPols) -> admUTM
+  get_adm(level=0, res='low') %>% cropProj(dom_pols) -> admUTM
   
   #plot sources and domains
   read_xlsx(input_xls, sheet='CALPUFF input') %>% 
     mutate_at(c('Lat', 'Long'), as.numeric) %>% to_spdf -> sources
   
-  ggplot() + annotation_spatial(admUTM) + layer_spatial(domPols, fill=NA) +
+  ggplot() + annotation_spatial(admUTM) + layer_spatial(dom_pols, fill=NA) +
     theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 
     annotation_spatial(sources, col='orange')
   ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
