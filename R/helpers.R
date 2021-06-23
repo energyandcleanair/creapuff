@@ -208,103 +208,6 @@ raster2contourPolys <- function(r, levels = NULL) {
   
 }
 
-initkml <- function() {
-  if(!file.exists("zip.exe"))
-    file.copy(boxpath("tools&templates/zip.exe"),"zip.exe")
-  labelF <- "factoryTransp3.png"
-  if(!file.exists(labelF))
-    file.copy(paste0("~/../Desktop/Box Sync/tools&templates/",labelF),labelF)
-}
-
-
-write_conc_kml <- function(outFileName,plotTitle=outFileName,
-                         contours,lvls,calpuff_files,
-                         CFPPplot=get('CFPPplot',envir=.GlobalEnv),
-                         sourceNameCol='Source.Name',
-                         times=NULL,
-                         initFile=T,closeFile=T,
-                         leaveLabels=F, #should the label image files be left in the directory for checking
-                         labelSize=.5,
-                         iconScale=.5,
-                         iconScaleCol=NULL) {
-  initkml()
-  colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
-  
-  #open file for writing and make label
-  if(initFile) {
-    legendlvls <- lvls
-    #legendlvls[length(lvls)] <- paste0(legendlvls[length(lvls)],calpuff_files[,"plotunit"])
-    plotTitle <- paste0(plotTitle,' (',calpuff_files[,"plotunit"],')')
-    labwidth <- max(sum(nchar(legendlvls))*56,
-                    nchar(plotTitle)*11)
-    
-    png("label.png",width=labwidth,height=100,pointsize=18,bg = "transparent")
-    
-    par(mar = rep(.5, 4))
-    plot(1, type="n", axes=FALSE, xlab="", ylab="")
-    legend("topleft", legend = legendlvls, col=yorb, pch = 15,
-           xjust=0.5, yjust=0,horiz=T,title = plotTitle,bg="white"
-    )
-    dev.off()
-    
-    kml_open(file.name=paste0(outFileName,".kml"))
-  }
-  
-  #write contours
-  if(!is.null(contours)) {
-    if(!is.list(contours))
-      list(contours) -> contours
-    
-    
-    formatTime <- function(x) ifelse(is.null(x),NULL,format(x,'%Y-%m-%dT%H:%M:%SZ'))
-    for(i in which(sapply(contours,nrow) > 0)) {
-      
-      if(!is.null(times)) {
-        start.end <- c(start=formatTime(times[i]),
-                       end=formatTime(times[i+1]-1))
-      } else start.end <- NULL
-      
-      contours[[i]]$colN <- rank(contours[[i]]$max)
-      kml_layer(obj=contours[[i]], subfolder.name=calpuff_files[,"plotunit"],
-                colour=colN,
-                colour_scale=c("steelblue","yellow","orange","red","darkred"),
-                alpha=0.5,altitude=0,plot.labpt=F,
-                labels=level,LabelScale=0.5,
-                TimeSpan.begin=start.end['start'],
-                TimeSpan.end=start.end['end'])
-    }
-  }
-  
-  
-  if(closeFile) {
-    if(!is.null(iconScaleCol)) {
-      CFPPplot$iconScale = iconScale(CFPPplot[[iconScaleCol]])
-    } else CFPPplot$iconScale = iconScale
-    
-    if(!is.null(labelSize)) {
-      CFPPplot$KMLlabel <- enc2utf8(as.character(CFPPplot@data[[sourceNameCol]]))
-      CFPPplot$labelSize <- labelSize
-    } else {
-      CFPPplot$KMLlabel <- ''
-      CFPPplot$labelSize <- .5
-    }
-    
-    kml_layer(obj=CFPPplot, subfolder.name="Modeled sources",
-              size=iconScale,
-              alpha=1,altitude=0,
-              labels=KMLlabel,
-              LabelScale=labelSize,sname="labels",shape="factoryTransp3.png")
-    kml_screen(image.file="label.png",position="UL",sname="Label")
-    kml_close(file.name=paste0(outFileName,".kml"))
-    zip(paste0(outFileName,".kmz"),c(paste0(outFileName,".kml"),"factoryTransp3.png","label.png"))
-    file.remove(paste0(outFileName,".kml"))
-    
-    if(leaveLabels) {
-      file.rename("label.png",paste0('label-',outFileName,'.png'))
-    } else file.remove("label.png")
-  }
-}
-
 #' Title
 #'
 #' @param gridR
@@ -379,7 +282,7 @@ get_wdpa_areas <- function(grids){
 #' @export
 #'
 #' @examples
-get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
+get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   
   ext <- gsub("^\\.","\\\\.",ext)
   files <- list.files(path=dir, pattern=paste0("rank.*",ext), full.names = T)
@@ -397,7 +300,8 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".") {
   calpuff_files[grep("tflx",calpuff_files$name),"scale"] <- 8760*3600/1e9*1e4
   calpuff_files[grep("tflx",calpuff_files$name),"unit"] <- "kg/ha/yr"
   
-  calpuff_files[calpuff_files$species == 'hg','scale'] <- calpuff_files[calpuff_files$species == 'hg','scale'] * 1e3
+  calpuff_files[calpuff_files$species == 'hg','scale'] %<>% multiply_by(1e6 * hg_scaling)
+  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in kg in CALPUFF.'))
   calpuff_files[calpuff_files$species == 'hg','unit'] <- "mg/ha/yr"
   
   calpuff_files$hr <- as.numeric(gsub("[_hr]","",calpuff_files$hr))
@@ -485,6 +389,19 @@ get_grids_calpuff <- function(calpuff_files,
               "gridLL"=gridLL))
 }
 
+#wrapper for readPuffInp that returns the CRS and grid properties
+get_grid_from_calpuff.inp <- function(scenarios=NULL,
+                                      dir="C:/CALPUFF/CALPUFF_v7.2.1_L150618",
+                                      filename_suffix="_CALPUFF_7.0.inp",
+                                      file_paths=file.path(dir, paste0(scenarios, filename_suffix)),
+                                      params_to_read = c('IUTMZN','UTMHEM','XORIGKM','YORIGKM','DGRIDKM','NX','NY'),
+                                      ...) {
+  if(is.null(scenarios)) scenarios <- file_path %>% basename %>% gsub(filename_suffix, '', .)
+  file_paths %>%
+    lapply(creapuff::readPuffInp, ...) %>%
+    lapply('[', params_to_read) %>%
+    lapply(data.frame) %>% bind_rows %>% tibble(scenario=scenarios, .)
+}
 
 
 
@@ -770,15 +687,15 @@ clean_inp <- function(calpuff_inp) {
 
 
 make_calpuff_inp <- function(files_met,
-                           calpuff_template,
-                           output_dir,
-                           puffrun=NULL,
-                           sourceLines=NULL,
-                           receptors=NULL,
-                           OZONE.DAT=NULL,
-                           bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
-                           addparams=list(),
-                           addsubgroups=list()) {
+                             calpuff_template,
+                             output_dir=unique(dirname(files_met$METDAT)),
+                             puffrun=NULL,
+                             sourceLines=NULL,
+                             receptors=NULL,
+                             OZONE.DAT=NULL,
+                             bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
+                             addparams=list(),
+                             addsubgroups=list()) {
   
   
   
@@ -787,8 +704,7 @@ make_calpuff_inp <- function(files_met,
   #read CALPUFF.INP
   calpuff_inp <- readLines(calpuff_template)
   
-  metdir=files_met$dir[1] %>% as.character()
-  file_out <- file.path(metdir, puffrun)
+  file_out <- file.path(output_dir, puffrun) %>% gsub('//', '/', .)
   
   files_met %<>% arrange(desc(GridD))
   metrun=files_met$run_name[1] %>% as.character()
@@ -806,7 +722,7 @@ make_calpuff_inp <- function(files_met,
   addparams$NMETDAT = nrow(files_met)
   
   if(nrow(files_met) == 1)
-    addparams$METDAT = file.path(metdir, paste0(files_met$grid_name,"_CALMET.DAT"))
+    addparams$METDAT = file.path(output_dir, paste0(files_met$grid_name,"_CALMET.DAT")) %>% gsub('//', '/', .)
   
   if(is.null(files_met$grid_name)) stop('grid_name cannot be NULL')
   for(r in 1:5) {
@@ -819,7 +735,8 @@ make_calpuff_inp <- function(files_met,
     addparams[[paste0('METDAT',r)]] <- 
       ifelse(gridLevelAvailable,
              file.path(files_met[r, "dir"],
-                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")),
+                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")) %>% 
+               gsub('//', '/', .),
              "not set")
   }
   
@@ -852,7 +769,7 @@ make_calpuff_inp <- function(files_met,
   if(!is.null(receptors))   addsubgroups %<>% c(list(X20c = receptors))
   
   for(sg in names(addsubgroups))
-    calpuff_inp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=grm(sg, "^X"))
+    calpuff_inp %<>% add_subgroup_lines(addsubgroups[[sg]], subgroup=gsub("^X", "", sg))
   
   #write into file
   outF <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp"))
@@ -891,8 +808,8 @@ read_geo <- function(geoPath) {
 }
 
 
-get_plant_elev <- function(sources.sp, dir, out_files) {
-  out_files %>% arrange(GridD) %>%
+get_plant_elev <- function(sources.sp, files_met, dir=unique(files_met$dir)) {
+  files_met %>% arrange(GridD) %>%
     mutate(path = file.path(dir, paste0(grid_name,".geo"))) %>%
     magrittr::use_series(path) %>% 
     lapply(read_geo) -> topoR
@@ -916,34 +833,25 @@ add_subgroup_lines <- function(inp, lines, subgroup, skip_lines=NULL) {
 }
 
 
-get_source_elev = function(sources, run_name) {
-  sources$base.elevation..msl <- 
-    get_plant_elev(sources, out_files_all %>% filter(run_name == city_sp$run_name))
-  sources.out
-}
 
+get_recep <- function(loc,
+                      run_name,
+                      files_met,
+                      nesting_factors=c(3, 10, 30),
+                      output_dir=unique(dirname(files_met$METDAT)),
+                      calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe',
+                      calpuff_template=system.file("extdata", "CALPUFF_7.0_template_Hg.INP", package="creapuff"),
+                      target_crs) {
 
-get_recep <- function(casecity,
-                     nesfactL=c(4, 16, 40),
-                     output_dir,
-                     calpuff_exe,
-                     calpuff_template,
-                     out_files_all,
-                     target_crs) {
-  # setwd(calpuffDir)
-  
-  run=casecity$run_name
-  files_met = out_files_all %>% subset(run_name == run) %>% arrange(desc(GridD))
-  inpDir <- files_met$dir[1]
+  files_met %<>% arrange(desc(GridD))
   calmetRes <- files_met$GridD[1] #resolution of the CALMET grid, in km
   calmetXY <- c(X=files_met$GridX[1],Y=files_met$GridY[1]) #origin (LL corner) of CALMET grid
   GridNX <- files_met$GridNX[1]
   GridNY <- files_met$GridNY[1]
   
-  source.id <- casecity$source.name #city_short # LC
-  cluster.center <- casecity %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
+  cluster.center <- loc %>% coordinates %>% data.frame %>% set_names(c("X", "Y"))
   
-  for(nesfact in nesfactL) {
+  for(nesfact in nesting_factors) {
     #calculate source position in CALMET grid
     sourceij <- ceiling((cluster.center - calmetXY) / calmetRes) %>% data.frame
     
@@ -959,9 +867,9 @@ get_recep <- function(casecity,
     
     #read CALPUFF.INP template
     files_met %>% 
-      make_calpuff_inp(puffrun=source.id,
-                     calpuff_template=calpuff_template,
-                     output_dir=output_dir) %>% 
+      make_calpuff_inp(puffrun=run_name,
+                       calpuff_template=calpuff_template,
+                       output_dir=output_dir) %>% 
       readLines -> calpuff_inp
     
     
@@ -988,36 +896,64 @@ get_recep <- function(casecity,
     set_puff(calpuff_inp, params) -> calpuff_inp
     
     #write into file
-    outinp <- file.path(output_dir, paste0(source.id,"_elevgen_CALPUFF_7.0.inp"))
+    calpuff_dir <- dirname(calpuff_exe)
+    outinp <- file.path(output_dir, paste0(run_name,"_elevgen_CALPUFF_7.0.inp"))
     writeLines(calpuff_inp, outinp)  
     
     org_dir <- getwd()
-    # calpuff_dir <- dirname(calpuff_exe)
     setwd(output_dir)
     
     #run CALPUFF setup to generate receptor grid  
-    # file.rename("qarecg.dat","qarecg_backup.dat")
-    system2(calpuff_exe, args=outinp)
+    system2(calpuff_exe, args=outinp) -> exit_code
+    if(exit_code != 0) stop("errors in CALPUFF execution")
     
     #rename receptor file and move to input directory
-    file.rename("qarecg.dat", paste(source.id,'nesfact',nesfact,"qarecg.dat",sep="_"))
+    file.rename("qarecg.dat", 
+                paste(run_name,'nesfact',nesfact,"qarecg.dat",sep="_"))
     
     setwd(org_dir)
   }
   
   
   ##read the receptor file written by CALPUFF and generate nested grids of discrete receptors
-  # setwd(inpDir)
   
   #read in and merge files generated above
-  nesfactL %>% 
+  nesting_factors %>% 
     lapply(function(nf) {
-      file.path(inpDir, paste(source.id,'nesfact',nf,"qarecg.dat",sep="_")) %>%
+      file.path(output_dir, paste(run_name,'nesfact',nf,"qarecg.dat",sep="_")) %>%
         read.table(stringsAsFactors = F,header=T) %>% 
         mutate(nesfact=nf)
     }) %>% bind_rows %>% to_spdf(crs=target_crs)
 }
 
+select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_factors, nesfact_range, files_met) {
+  if(is.list(receptors)) receptors %<>% do.call(rbind, .)
+  receptors %<>% subset(!duplicated(coordinates(.)))
+  r=raster(extent(receptors), res=1, crs=crs(receptors))
+  
+  sources$flag=1
+  sourcesR=sources %>% to_spdf %>% spTransform(crs(r)) %>% rasterize(r, 'flag')
+  dist_to_source=distance(sourcesR)
+  extract(dist_to_source, receptors) -> receptors$dist_to_source
+  
+  receptors$include=F
+  
+  for(i in seq_along(nesting_factors))
+    receptors$include[receptors$dist_to_source<nesfact_range[i] & receptors$nesfact==nesting_factors[i]] <- T
+  
+  print(paste(run_name, sum(receptors$include), 'receptors'))
+  if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
+  
+  plotadm = creahelpers::get_adm(0, 'coarse') %>% cropProj(r)
+  quickpng(file.path(output_dir, paste(run_name, 'receptors.png'))  )   
+  receptors %>% subset(include) %>% sp::plot(col='gray', cex=.5)
+  plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
+  
+  sources %>% sp::plot(add=T)
+  dev.off()
+  
+  return(receptors)
+}
 
 make_topo_rows <- function(topoXYZ) {
   paste0("Disc",1:nrow(topoXYZ),
@@ -1029,9 +965,9 @@ make_topo_rows <- function(topoXYZ) {
 }
 
 
-get_bg_concs = function(sources, mod_dir) {
-  
-  sources %<>% to_spdf
+get_bg_concs = function(locs, mod_dir=file.path(get_gis_dir(), "background")) {
+  if(is.null(locs$ID)) locs$ID <- 1:nrow(locs)
+  locs %<>% to_spdf
   #retrieve concentrations from Asia nested runs
   #file names
   files_bg <- list("Max_8-hour_ozone" = "present_mda8.nc",
@@ -1074,7 +1010,7 @@ get_bg_concs = function(sources, mod_dir) {
                           ymin-yres/2,
                           ymax+yres/2))
     
-    raster::extract(r, sources) -> conc
+    raster::extract(r, locs) -> conc
     
     conc %>% 
       multiply_by(scaling[i]) %>% 
@@ -1091,8 +1027,8 @@ get_bg_concs = function(sources, mod_dir) {
   
   if(length(miss)>0) {
     file.path(mod_dir, 'Geos-Chem_v8-02-04-geos5-Run2_bgconcs.grd') %>% 
-      stack %>% raster::extract(sources[miss, ]) %>% 
-      data.frame(sources@data[miss, ], .) %>% 
+      stack %>% raster::extract(locs[miss, ]) %>% 
+      data.frame(locs@data[miss, ], .) %>% 
       gather(var, val, contains("_M")) %>% 
       separate('var', c('spec', 'M')) %>% 
       spread(M, val) -> globconcs
@@ -1105,10 +1041,10 @@ get_bg_concs = function(sources, mod_dir) {
       round(3) %>% 
       apply(1, paste, collapse=", ") -> globconcs$str
     
-    globconcs %<>% dlply(.(spec))
+    globconcs %<>% plyr::dlply(plyr::.(spec))
     
     for(s in spec) {
-      ind <- match(sources$city[miss], globconcs[[s]]$city)
+      ind <- match(locs$ID[miss], globconcs[[s]]$ID)
       concs[[s]][miss] <- globconcs[[s]]$str[ind]
     } 
   }
@@ -1116,8 +1052,8 @@ get_bg_concs = function(sources, mod_dir) {
   
   concs %>% set_names(spec) %>% 
     lapply(data.frame) %>% lapply(set_names, 'str') %>% 
-    lapply(data.frame, sources@data) %>% 
-    ldply(.id='spec') %>% 
+    lapply(data.frame, locs@data) %>% 
+    bind_rows(.id='spec') %>% 
     spread(spec, str)
 }
 

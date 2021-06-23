@@ -1,0 +1,387 @@
+Example application for total deposition fluxes (wet & dry)
+Nitrogen deposition due to NO, NO2, HNO3, NH4NO3, and (NH4)2SO4
+Sulfur deposition due to SO2, (NH4)2SO4
+---------------- Run title (3 lines) ------------------------------------------
+
+                    POSTUTIL MODEL CONTROL FILE
+                    ---------------------------
+
+-------------------------------------------------------------------------------
+
+INPUT GROUP: 0 -- Input and Output File Names
+--------------
+
+-------------
+Subgroup (0a)
+-------------
+
+Output Files
+------------
+
+ File            Default File Name
+ ----            -----------------
+ List File       POSTUTIL.LST       ! UTLLST =POSTUTIL_Depo.LST   !
+ Data File       MODEL.DAT          ! UTLDAT =F:\TAPM\Mintia\Mintia_Depo.FLX       !
+
+
+
+Input Files
+-----------
+
+ A time-varying file of "background" concentrations can be included
+ when the ammonia-limiting method (ALM) for setting the HNO3/NO3
+ concentration partition is accomplished in 1 step.  This option
+ is selected by setting MNITRATE=3 in Input Group 1.
+ Species required in the "background" concentration file are: 
+ SO4, NO3, HNO3 and TNH3 (total NH3).
+
+ File            Default File Name
+ ----            -----------------
+ BCKG File       BCKGALM.DAT         * BCKGALM =BCKGALM.DAT     *
+
+
+ A number of CALPUFF data files may be processed in this application.
+ The files may represent individual CALPUFF simulations that were made
+ for a specific set of species and/or sources.  Specify the total number
+ of CALPUFF runs you wish to combine, and provide the filename for each
+ in subgroup 0b.
+
+     Number of CALPUFF data files (NFILES)
+                                     Default: 1       ! NFILES  = 2   !
+
+
+ Meteorological data files are needed for the HNO3/NO3 partition option.
+ Three types of meteorological data files can be used:
+       METFM= 0 - CALMET.DAT
+       METFM= 1 - 1-D file with RH, Temp and Rhoair timeseries
+       METFM= 2 - 2-D files with either Rh, Temp or Rhoair in each
+                  (3 2_D files are needed)
+      The default is to use CALMET.DAT files.
+
+                                     Default: 0       ! METFM   = 0   !
+      
+ 
+ Multiple meteorological data files may be used in sequence to span the
+ processing period.  Specify the number of time-period files (NMET) that
+ you need to use, and provide a filename for each in subgroup 0b.
+ - NMET is 0 if no meteorological files are provided
+ - NMET is 1 if METFM=1 (multiple file feature is not available)
+ - NMET is 1 or more if METFM=0 or 2 (multiple CALMET files or 2DMET files)
+
+     Number of meteorological data file time-periods (NMET)
+                                     Default: 0       ! NMET    = 0   !
+
+
+
+ All filenames will be converted to lower case if LCFILES = T
+ Otherwise, if LCFILES = F, filenames will be converted to UPPER CASE
+
+     Convert filenames to lower case?  Default: T     ! LCFILES = T !
+         T = lower case                               
+         F = UPPER CASE
+
+!END!
+
+-----------------------------------------------------------
+ NOTE: file/path names can be up to 70 characters in length
+-----------------------------------------------------------
+
+-------------
+Subgroup (0b)
+-------------
+
+NMET CALMET Data Files (METFM=0):
+
+Input File      Default File Name
+----------      -----------------
+   1            MET.DAT            * UTLMET =   * *END*
+
+
+NMET 1-D Data Files (METFM=1):
+
+Input File      Default File Name
+----------      -----------------
+   1            MET_1D.DAT         * MET1D   = MET_1D.DAT * *END*
+
+
+NMET 2-D Data Files of Each Type (METFM=2):
+
+Input File      Default File Name
+----------      -----------------
+   1            RHUMD.DAT          * M2DRHU  = RELHUM.DAT * *END*
+   1            TEMP.DAT           * M2DTMP  = TEMP.DAT   * *END*
+   1            RHOAIR.DAT         * M2DRHO  = RHOAIR.DAT * *END*
+
+
+NFILES CALPUFF Data Files:
+
+Input File      Default File Name
+----------      -----------------
+   1            CALPUFF.DAT        ! MODDAT = F:\TAPM\Mintia\Mintia.WET    ! !END!
+   2            (none)             ! MODDAT = F:\TAPM\Mintia\Mintia.DRY    ! !END!
+
+
+-------------
+Note:  provide NMET lines of the form   * UTLMET = name * *END* 
+
+                                   or   * MET1D  = name * *END* 
+
+                                   or   * M2DRHU = name * *END* 
+                                (and)   * M2DTMP = name * *END* 
+                                (and)   * M2DRHO = name * *END* 
+
+       and NFILES lines of the form     * MODDAT = name * *END*
+ 
+       where the * should be replaced with an exclamation point,
+       the special delimiter character.
+
+
+--------------------------------------------------------------------------------
+
+INPUT GROUP: 1 -- General run control parameters
+--------------
+
+     Starting date:    Year  (ISYR) --    No default   ! ISYR  =  2014 !
+                       Month (ISMO) --    No default   ! ISMO  = 1   !
+                       Day   (ISDY) --    No default   ! ISDY  = 1   !
+                       Hour  (ISHR) --    No default   ! ISHR  = 2   !
+
+     Number of periods to process
+                                (NPER) -- No default   ! NPER  = 8757   !
+
+     Number of species to process from CALPUFF runs
+                            (NSPECINP) -- No default   ! NSPECINP = 11 !
+
+     Number of species to write to output file
+                            (NSPECOUT) -- No default   ! NSPECOUT = 3 !
+
+     Number of species to compute from those modeled
+     (must be no greater than NSPECOUT)
+                            (NSPECCMP) -- No default   ! NSPECCMP = 3 !
+
+
+ When multiple files are used, a species name may appear in more than
+ one file.  Data for this species will be summed (appropriate if the
+ CALPUFF runs use different source groups).  If this summing is not
+ appropriate, remove duplicate species from the file(s).
+
+     Stop run if duplicate species names
+     are found? (MDUPLCT)            Default: 0       ! MDUPLCT  =  0  !
+        0 = no  (i.e., duplicate species are summed)
+        1 = yes (i.e., run is halted)
+
+ Data for each species in a CALPUFF data file may also be scaled as
+ they are read.  This can be done to alter the emission rate of all
+ sources that were modeled in a particular CALPUFF application.
+ The scaling factor for each species is entered in Subgroup (2d), for
+ each file for which scaling is requested.
+
+     Number of CALPUFF data files that will be scaled
+     (must be no greater than NFILES)
+     (NSCALED)                       Default: 0       ! NSCALED = 0 !
+
+
+ Ammonia-Limiting Method Option to recompute the HNO3/NO3 concentration
+ partition prior to performing other actions is controlled by MNITRATE.
+ This option will NOT alter any deposition fluxes contained in the CALPUFF
+ file(s).  Three partition selections are provided.  The first two are
+ typically used in sequence (POSTUTIL is run more than once).  The first
+ selection (MNITRATE=1) computes the partition for the TOTAL (all sources)
+ concentration fields (SO4, NO3, HNO3; NH3), and the second (MNITRATE=2)
+ uses this partition (from the previous application of POSTUTIL) to
+ compute the partition for individual source groups.  The third selection
+ (MNITRATE=3) can be used instead in a single POSTUTIL application if a
+ file of background concentrations is provided (BCKGALM in Input Group 0). 
+
+ Required information for MNITRATE=1 includes:
+          species NO3, HNO3, and SO4
+          NH3 concentration(s)
+          met. data file for RH and T
+
+ Required information for MNITRATE=2 includes:
+          species NO3 and HNO3 for a source group
+          species NO3ALL and HNO3ALL for all source groups, properly
+          partitioned
+
+ Required information for MNITRATE=3 includes:
+          species NO3, HNO3, and SO4 for a source group
+          species NO3, HNO3, SO4 and TNH3 from the background BCKGALM file
+          If TNH3 is not in the background BCKGALM file, monthly TNH3
+          concentrations are used (BCKTNH3)
+
+     Recompute the HNO3/NO3 partition for concentrations?
+     (MNITRATE)                     Default: 0       ! MNITRATE  =  0  !
+        0 = no
+        1 = yes, for all sources combined
+        2 = yes, for a source group
+        3 = yes, ALM application in one step
+
+
+ SOURCE OF AMMONIA:
+
+ Ammonia may be available as a modeled species in the CALPUFF files,
+ and it may or may not be appropriate to use it for repartitioning NO3/HNO3
+ (in option MNITRATE=1 or MNITRATE=3).  Its use is contolled by NH3TYP.
+ When NH3 is listed as a processed species in Subgroup (2a), as one of 
+ the NSPECINP ASPECI entries, and the right option is chosen for NH3TYP,
+ the NH3 modeled values from the CALPUFF concentration files will be used
+ in the chemical equilibrium calculation.
+
+ NH3TYP also controls when monthly background ammonia values are used.  Both
+ gaseous (NH3) and total (TNH3) ammonia can be provided monthly as
+ BCKNH3/BCKTNH3.
+     
+     What is the input source of Ammonia?
+     (NH3TYP)                       No Default       ! NH3TYP = 3  !
+        0 = No background will be used.
+            ONLY NH3 from the concentration 
+            files listed in Subgroup (2a) as 
+            a processed species will be used.
+            (Cannot be used with MNITRATE=3)
+
+        1 = NH3 Monthly averaged background (BCKNH3)
+            listed below will be added to NH3 from 
+            concentration files listed in Subgroup (2a)
+
+        2 = NH3 from background concentration file BCKGALM
+            will be added to NH3 from concentration files
+            listed in Subgroup (2a)
+            (ONLY possible for MNITRATE=3)
+
+        3 = NH3 Monthly averaged background (BCKNH3)
+            listed below will be used alone.
+
+        4 = NH3 from background concentration file BCKGALM
+            will be used alone
+            (ONLY possible for MNITRATE=3)
+
+    | NH3TYP | NH3 CONC | NH3 FROM BCKNH3 | NH3 FROM BCKGALM | 
+    |--------|----------|-----------------|------------------|
+    |    0   |    X     |        0        |        0         |
+    |--------|----------|-----------------|------------------|
+    |    1   |    X     |        X        |        0         |
+    |--------|----------|-----------------|------------------|
+    |    2   |    X     |        0        |        X         |
+    |--------|----------|-----------------|------------------|
+    |    3   |    0     |        X        |        0         |
+    |--------|----------|-----------------|------------------|
+    |    4   |    0     |        0        |        X         |
+    |--------|----------|-----------------|------------------|
+
+
+     Default monthly (12 values) background ammonia concentration (ppb)
+     used for HNO3/NO3 partition:
+    
+      Gaseous NH3 (BCKNH3)            Default: -999
+    *  BCKNH3 = 0.209, 0.401, 1.54, 1.709, 2.042, 1.719, 1.648, 1.434, 1.664, 1.186, 0.701, 0.503 *
+
+      Total TNH3  (BCKTNH3)           Default: -999
+      * BCKTNH3 = 1.88, 2.46, 2.59, 2.24, 1.81, 3.22, 1.41, 1.5, 1.42, 1.93, 2.08, 2.23 *
+     
+     If a single value is entered, this is used for all 12 months.  
+     Month 1 is JANUARY, Month 12 is DECEMBER.
+
+!END!
+-------------------------------------------------------------------------------
+
+INPUT GROUP: 2 -- Species Processing Information
+--------------
+
+-------------
+Subgroup (2a)
+-------------
+
+  The following NSPECINP species will be processed:
+
+! ASPECI =          SO2 !         !END!
+! ASPECI =          SO4 !         !END!
+! ASPECI =          NO  !         !END!
+! ASPECI =          NO2 !         !END!
+! ASPECI =         HNO3 !         !END!
+! ASPECI =          NO3 !         !END!
+! ASPECI =         PM15 !         !END!
+! ASPECI =         PM10 !         !END!
+! ASPECI =        PPM25 !         !END!
+! ASPECI =         Hg0 !         !END!
+! ASPECI =        RGM !         !END!
+
+
+-------------
+Subgroup (2b)
+-------------
+
+  The following NSPECOUT species will be written:
+
+! ASPECO =         PM !         !END!
+! ASPECO =         SO2eq !         !END!
+! ASPECO =         Hg !         !END!
+
+
+-------------
+Subgroup (2c)
+-------------
+
+  The following NSPECCMP species will be computed by scaling and summing
+  one or more of the processed input species.  Identify the name(s) of
+  the computed species and provide the scaling factors for each of the
+  NSPECINP input species (NSPECCMP groups of NSPECINP+1 lines each):
+
+! CSPECCMP =        PM !
+!     SO2  =     0.0 !
+!     SO4  =     0.0 !
+!     NO   =     0.0 !
+!     NO2  =     0.0 !
+!    HNO3  =     0.0 ! 
+!     NO3  =     0.0 !
+!    PM10  =     1.0 !
+!   PPM25  =     1.0 !
+!     Hg0  =     0.0 !
+!    RGM   =     0.0 !
+!END!
+
+
+! CSPECCMP =        SO2eq !
+!     SO2  =     1 !
+!     SO4  =     0.666667 !
+!     NO   =     1.073333 !
+!     NO2  =     0.7 !
+!    HNO3  =     0.511111 ! 
+!     NO3  =     0.519355 !
+!    PM10  =     0.0 !
+!   PPM25  =     0.0 !
+!     Hg0  =     0.0 !
+!    RGM   =     0.0 !
+!END!
+
+! CSPECCMP =        Hg !
+!     SO2  =     0.0 !
+!     SO4  =     0.0 !
+!     NO   =     0.0 !
+!     NO2  =     0.0 !
+!    HNO3  =     0.0 ! 
+!     NO3  =     0.0 !
+!    PM10  =     0.002810586 !
+!   PPM25  =     0.0 !
+!     Hg0  =     1.0 !
+!    RGM   =     1.0 !
+!END!
+
+-------------
+Subgroup (2d)
+-------------
+
+  Each species in NSCALED CALPUFF data files may be scaled before being
+  processed (e.g., to change the emission rate for all sources modeled
+  in the run that produced a data file).  For each file, identify the
+  file name and then provide the name(s) of the scaled species and the
+  corresponding scaling factors (A,B where x' = Ax+B).
+
+               A(Default=1.0)      B(Default=0.0)
+               --------------      --------------
+
+* MODDAT =NOFILES.DAT    *
+*     SO2  =      1.1,                 0.0   *
+*     SO4  =      1.5,                 0.0   *
+*    HNO3  =      0.8,                 0.0   *
+*     NO3  =      0.1,                 0.0   *
+*END*

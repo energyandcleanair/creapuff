@@ -15,6 +15,8 @@ calpuff_files <- get_calpuff_files(ext=".tif", gasunit = 'ug', dir=output_dir)
 
 #read list of modeled plants
 plants <- readxl::read_xlsx('~/CALPUFF/PH Coal plants_CEED.xlsx', sheet='Re-Runs', skip=8)
+plants$Plant %<>% gsub('Unit 1 & 2', 'Units 1-2', .)
+plants$Plant[grep('/', plants$Plant)] %<>% gsub('/ ', '(', .) %>% paste0(')')
 plants$scenario_short = plants$Plant %>% substr(1,3) %>% tolower
 calpuff_files$scenario_short = calpuff_files$scenario %>% substr(1,3)
 plants <- calpuff_files %>% distinct(scenario, scenario_short) %>% 
@@ -47,7 +49,7 @@ calpuff_files %>%
                              plants=plants_to_plot,
                              plant_names=plants_to_plot$Plant,
                              zipping_function=zipping_function,
-                             outputs=c('png','expPop'),
+                             outputs=c('kml'),
                              filename_suffix = paste0('_', df$scenario[1]))
               })
 

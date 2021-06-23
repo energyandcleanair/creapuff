@@ -34,6 +34,7 @@ make_titletxt = function(calpuff_files) {
 #'
 #' @examples
 plot_results <- function(calpuff_files,
+                         scenario_names = calpuff_files$scenarioName,
                          dir=dirname(calpuff_files$path[1]),
                          map_res=1,
                          plants=NULL,
@@ -75,8 +76,9 @@ plot_results <- function(calpuff_files,
   adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
 
   expPop <- list()
-  popCP = write_conc_kml(grids=grids)
+  popCP = make_pop(grids = grids)
   
+  calpuff_files$scenarioName <- scenario_names
   if(is.null(calpuff_files$scenarioName)) calpuff_files$scenarioName <- calpuff_files$scenario
   
   if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
@@ -206,8 +208,9 @@ plot_results <- function(calpuff_files,
         contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
         outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
         
-        colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
         
+        colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
+        plotKML.env(colour_scale_numeric = yorb)
         
         png(file.path(dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
         
@@ -229,12 +232,12 @@ plot_results <- function(calpuff_files,
         
         kml_file <- file.path(dir, paste0(outL,".kml"))
         kmz_file <- file.path(dir, paste0(outL,".kmz"))
-        colour <- rank(contP@data$max)
+        contP$colour_index <- rank(contP@data$max)
         kml_open(kml_file)
         kml_layer(obj=contP,
                   subfolder.name=calpuff_files[file,"unit"],
-                  # colour=colour, #TODO NOT SURE WHY IT DOESN'T WORK
-                  colour_scale=yorb,
+                  colour=colour_index, 
+                  #colour_scale=yorb,
                   alpha=0.5,
                   altitude=0,
                   plot.labpt=F,
