@@ -86,11 +86,11 @@ creapuff::runPostprocessing(
   run_name=calmet_result$run_name,
   pm10fraction=calpuff_result$pm10fraction,
   output_dir=output_dir,
-  files_met=calpuff_result$out_files_all,
+  files_met=calpuff_result$out_files,
   pu_exe=pu_exe,
   pu_templates=pu_templates,
   calpost_exe=calpost_exe,
   calpost_templates=calpost_templates,
-  run_pu=T,
+  run_pu=F,
   run_calpost=F
 )
