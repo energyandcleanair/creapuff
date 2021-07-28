@@ -61,13 +61,13 @@ read_xlsx(input_xls, sheet='CALPUFF input') -> emissions_data
 # CALPUFF ######################################################################
 
 calpuff_result <- creapuff::runCalpuff(
-  emissions_data=emissions_data,             
-  # source_names=source_names,  # Optional. If not set, read from emissions_data (if not present, set automatically) 
-  # FGD="F",                    # Optional. If not set, read from emissions_data
-  # receptors=receptors,        # Optional. If not set, full domain grid 
-  # o3dat=o3dat,                # Optional. If not set, no surface data
-  # bgconcs=bgconcs,            # Optional. If not set, std values
-  # addparams=addparams,        # Optional. If not set, std values
+  emissions_data=emissions_data, # For constant emissions   
+  # source_names=source_names,   # Optional. If not set, read from emissions_data (if not present, set automatically) 
+  # FGD="F",                     # Optional. If not set, read from emissions_data
+  # receptors=receptors,         # Optional. If not set, full domain grid 
+  # o3dat=o3dat,                 # Optional. If not set, no surface data
+  # bgconcs=bgconcs,             # Optional. If not set, std values
+  # addparams=addparams,         # Optional. If not set, std values
   run_name=calmet_result$run_name,
   output_dir = output_dir,
   params_allgrids = calmet_result$params,
