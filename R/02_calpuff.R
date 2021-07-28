@@ -140,9 +140,12 @@ runCalpuff <- function(
                                                     "! ZPLTFM  =       .0 !",
                                                     "! FMFAC  =      1.0 !   !END!")
   }
-
-  
-  #LC, TO DO : what if(is.null(emissions_data)) ?
+  else
+  {
+    # LC, what if(is.null(emissions_data)) ?
+    source_lines=NULL  # LC
+    runsources=NULL    # LC
+  }  
   
   if(is.null(addparams$DATUM)) addparams$DATUM="WGS-84"
   receptors_selected = NULL
@@ -154,14 +157,16 @@ runCalpuff <- function(
                    puffrun=run_name,
                    bgconcs = bgconcs,        
                    OZONE.DAT = o3dat,        
-                   source_lines=source_lines,  
-                   addparams=addparams, 
+                   source_lines = source_lines,  
+                   addparams = addparams, 
                    receptors = receptors_selected)  -> 
                    # receptors=receptors %>% subset(include) %>% make_topo_rows) ->   # LC : subset (only if not NULL) outside the function call   
     inpfiles_created
-  
-  pm10fraction = sum(runsources$Hgp) / sum(runsources$PM10)
-  
+
+  if (species_configuration == "so2_nox_pm_hg") 
+    pm10fraction = sum(runsources$Hgp) / sum(runsources$PM10)
+  if (species_configuration == "so2_nox_pm") 
+    pm10fraction = NULL
 
   #run CALPUFF
   org_dir <- getwd()
