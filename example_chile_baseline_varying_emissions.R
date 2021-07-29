@@ -10,7 +10,7 @@ expand_grids = '*' # All grids are expanded
 expand_ncells = -5 # Number of cells to expand in each direction (use negative values to crop)
 
 # input_xls <- file.path("F:/projects/chile_test/chile_emissions_baseline_test.xlsx") # Where constant-emission data are specified 
-emissions_dir <-"F:/projects/chile_test/emissions/2019" # Where arbitrary-varying emission files are stored
+emissions_dir <-"F:/projects/chile_test/emissions/2019_corrected" # Where arbitrary-varying emission files are stored
 output_dir <- "F:/projects/chile_test/calpuff_suite" # Where to write all generated files
 wrf_dir <-"F:/projects/chile_test/calwrf" # Where calwrf data are stored
 
@@ -65,24 +65,27 @@ file.path(emissions_dir) %>% list.files(pattern='\\.DAT$', recursive = F, full.n
 # CALPUFF ######################################################################
 
 queue = unique(emissions_file)
-for(emissions_filename in queue) {
-  NPT2 <- emissions_filename %>% scan(what = integer(), nmax = 1, sep = "",
-                                      skip = 9, nlines = 1)
-  print(emissions_filename)
-  print(NPT2)
+for(input_emissions_file in queue) {
   
-  calpuff_result <- creapuff::runCalpuff(
-    # emissions_data=emissions_data, # For constant emissions
+  plant_name <- input_emissions_file %>% gsub('.*/ptemarb_|\\.DAT', '', .) %>% # substr(1,5) %>% 
+    stringi::stri_trans_general("Latin-ASCII") %>% make.names()
+  NPT2 <- input_emissions_file %>% scan(nmax = 1, sep = "", skip = 9, nlines = 1) %>% as.numeric
+  run_name <- paste(calmet_result$run_name, plant_name,sep='_')
+  
+  print(paste0("Run name: ", run_name, ", n sources: ", NPT2))
+
+    calpuff_result <- creapuff::runCalpuff(
+    # emissions_data=emissions_data, # For constant emissions 
     # source_names=source_names,     # Optional. If not set, read from emissions_data (if not present, set automatically)
     # FGD="F",                       # Optional. If not set, read from emissions_data
     # receptors=receptors,           # Optional. If not set, full domain grid
     # o3dat=o3dat,                   # Optional. If not set, no surface data
     # bgconcs=bgconcs,               # Optional. If not set, std values
     species_configuration = "so2_nox_pm",  # "so2_nox_pm" or "so2_nox_pm_hg"
-    addparams = list(NPTDAT = 1,     # For varying emissions
-                     PTDAT = emissions_filename,
+    addparams = list(NPTDAT = 1,     # For arbitrary-varying emissions
+                     PTDAT = input_emissions_file,
                      NPT2 = NPT2),
-    run_name=calmet_result$run_name,
+    run_name=run_name,
     output_dir = output_dir,
     params_allgrids = calmet_result$params,
     gis_dir = gis_dir,
