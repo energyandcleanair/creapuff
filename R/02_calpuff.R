@@ -19,7 +19,7 @@ runCalpuff <- function(
   emissions_data=NULL, #data.frame with emissions data for all sources
   source_names=NULL,
   FGD=NULL,
-  species_configuration = "so2_nox_pm_hg",
+  species_configuration=NULL, # "so2_nox_pm" or "so2_nox_pm_hg"
   emitted_polls = list(so2_nox_pm_hg=c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM','Hgp'),  # LC: add Hgp specie
                        so2_nox_pm=c('SO2','NO','NO2','PM15','PM10','PPM25'))[[species_configuration]],
   receptors=NULL,
@@ -168,12 +168,12 @@ runCalpuff <- function(
   if (species_configuration == "so2_nox_pm") 
     pm10fraction = NULL
 
-  #run CALPUFF
+  # Run CALPUFF
   org_dir <- getwd()
   setwd(output_dir)
-  inpfiles_created %>% paste(calpuff_exe, .) %>% pbapply::pblapply(system)
+  # inpfiles_created %>% paste(calpuff_exe, .) %>% pbapply::pblapply(system)
   
-  #create .bat files to run CALPUFF
+  # Create .bat files to run CALPUFF
   inpfiles_created %>% split(1) -> batches
   jobname=run_name
   for(i in seq_along(batches)) {
@@ -184,11 +184,11 @@ runCalpuff <- function(
   
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
-  result$sources <- runsources  # LC : CHECK (runsources instead of sources)
-  result$out_files <- out_files  # LC : CHECK (out_files instated of out_files_all) 
+  result$sources <- runsources   # LC : CHECK (runsources instead of sources)
+  result$out_files_all <- out_files  # LC : CHECK (out_files instated of out_files_all) 
   result$pm10fraction <- pm10fraction
   
-  saveRDS(result, file.path(output_dir, paste0('calpuff_result', '.RDS')))  # LC : save result
+  saveRDS(result, file.path(output_dir, paste0('calpuff_result_',run_name,'.RDS')))  # LC : save result
   
   return(result)
 }

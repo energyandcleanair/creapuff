@@ -883,8 +883,8 @@ get_recep <- function(loc,
                    JESAMP=min(JBSAMP+rng-1, GridNY),
                    DATUM='WGS-84',
                    MESHDN=nesfact,
-                   ITEST=1, #STOPS program after SETUP phase
-                   NPT1=0) #no emission sources
+                   ITEST=1,  # STOPS program after SETUP phase
+                   NPT1=0)  # No emission sources
     
     #remove discrete receptors and emissions sources from calpuff INP
     grep('^Subgroup \\(13b\\)', calpuff_inp) -> psst
@@ -945,7 +945,8 @@ select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_fac
     receptors$include[receptors$dist_to_source<nesfact_range[i] & receptors$nesfact==nesting_factors[i]] <- T
   
   print(paste(run_name, sum(receptors$include), 'receptors'))
-  if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000*2) stop('too many receptors!')  # LC : *2
+  # if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000*2) stop('too many receptors!')  # LC : *2
+  if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
   
   plotadm = creahelpers::get_adm(0, 'coarse') %>% cropProj(r)
   quickpng(file.path(output_dir, paste0(run_name, '_', 'receptors.png'))  )
