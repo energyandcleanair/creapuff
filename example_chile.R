@@ -15,7 +15,7 @@ library("pbapply")
 expand_grids = '*'  # All grids are expanded 
 expand_ncells = -5  # Number of cells to expand in each direction (use negative values to crop)
 
-input_xls <- file.path("Z:/projects/chile/chile_emissions_test.xlsx") # ChileClusters.xlsx
+input_xls <- file.path("Z:/projects/chile/emissions_test.xlsx") # ChileClusters.xlsx
 output_dir <- "Z:/projects/chile/calpuff_suite"  # Where to write all generated files
 wrf_dir <-"Z:/projects/chile/calwrf"             # Where calwrf data are stored (if Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
 
@@ -44,20 +44,20 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 
 # CALMET #######################################################################
 
-calmet_result <- creapuff::runCalmet(
-  input_xls = input_xls,
-  wrf_dir = wrf_dir,
-  expand_grids = expand_grids,
-  expand_ncells = expand_ncells,
-  output_dir = output_dir,
-  gis_dir = gis_dir,
-  calmet_exe = calmet_exe,
-  calmet_templates = calmet_templates,
-  only_make_additional_files=F,
-  run_calmet = T
-)
+# calmet_result <- creapuff::runCalmet(
+#   input_xls = input_xls,
+#   wrf_dir = wrf_dir,
+#   expand_grids = expand_grids,
+#   expand_ncells = expand_ncells,
+#   output_dir = output_dir,
+#   gis_dir = gis_dir,
+#   calmet_exe = calmet_exe,
+#   calmet_templates = calmet_templates,
+#   only_make_additional_files=F,
+#   run_calmet = T
+# )
 
-# calmet_result = readRDS(file.path(output_dir,"calmet_result.RDS" ))
+calmet_result = readRDS(file.path(output_dir,"calmet_result.RDS" ))
 
 
 # INPUT DATA ################################################################
