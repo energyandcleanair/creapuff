@@ -184,8 +184,8 @@ runCalpuff <- function(
   
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
-  result$sources <- runsources   # LC : CHECK (runsources instead of sources)
-  result$out_files_all <- out_files  # LC : CHECK (out_files instated of out_files_all) 
+  result$sources <- runsources   
+  result$out_files <- out_files  
   result$pm10fraction <- pm10fraction
   
   saveRDS(result, file.path(output_dir, paste0('calpuff_result_',run_name,'.RDS')))  # LC : save result
