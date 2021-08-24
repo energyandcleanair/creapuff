@@ -10,48 +10,50 @@ library("pbapply")
 
 # Parameters ###################################################################
 
-# Project specific
-expand_grids = '*'  # All grids are expanded 
+# ============================= Project specific ===============================
+expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each direction (use negative values to crop)
 
-project_dir="F:/projects/chile_test"      # calpuff_data persistent disk (calpuff config data)
-# project_dir="Z:/projects/chile" #_test"   # network disk (wrf_data)
-# project_dir="G:/projects/chile" #_test"     # calpuff_data persistent disk (project data )
+# project_dir="F:/projects/chile_test" # calpuff_data persistent disk (calpuff config data)
+# project_dir="Z:/projects/chile"      # network disk (wrf_data)
+project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
 
 emission_type = "varying"  # Real emissions
 # emission_type = "constant"  # Emissions and stations are NOT real, just a test case 
-
 if (emission_type == "constant") 
   input_xls <- file.path(project_dir,"emissions_test.xlsx") # File where constant-emission data are specified
-
 if (emission_type == "varying") {
   emissions_dir <- file.path(project_dir,"emissions/2019") # Directory where arbitrary-varying emission files are stored
   input_xls <- file.path(emissions_dir,"coordinates.xlsx") # Where plant positions are reported
 }
+
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored (if Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
 
-# General parameters
-gis_dir <- "F:/gis"                              # The folder where we store general GIS data
+# ============================= General parameters =============================
+gis_dir <- "F:/gis"                         # The folder where we store general GIS data
 bc_dir  <- file.path(gis_dir, "background") # The folder with background atmospheric concentrations for O3, NH3, H2O2
 
-calmet_exe <- "C:/CALPUFF/CALMET_v6.5.0_L150223/calmet_v6.5.0.exe"
-calmet_templates <- list(noobs="F:/templates/CALMET_template.INP", 
-                         surfobs="F:/templates/CALMET_surfObs_template.inp")
-
-calpuff_exe <- "C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe"
-# calpuff_template <- file.path("F:/templates/CALPUFF_7.0_template_Hg.INP")  
-calpuff_template <- file.path("F:/templates/CALPUFF_7.0_template.INP")  # If emission data do include mercury, use : "F:/templates/CALPUFF_7.0_template_Hg.INP"
-
-pu_exe <- "C:/CALPUFF/POSTUTIL_v7.0.0_L150207/postutil_v7.0.0.exe"
+exe_dir="C:/CALPUFF"
+calmet_exe <- file.path(exe_dir,"CALMET_v6.5.0_L150223/calmet_v6.5.0.exe")
+calpuff_exe <- file.path(exe_dir,"CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe")
+pu_exe <- file.path(exe_dir,"POSTUTIL_v7.0.0_L150207/postutil_v7.0.0.exe")
+calpost_exe <- file.path(exe_dir,"CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe")
 
 template_dir="F:/templates"
-pu_templates <- list (sumruns="AfsinFut_postutil_sumruns.inp",
-                      repartition = file.path(template_dir, "Mintia_postutilRepartition_noHg.inp"),  # If emission data include mercury, use : "Mintia_postutilRepartition.inp"
-                      deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
-                      total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))  # If emission data include mercury, use : "Mintia_postutil_PM10.inp" 
+calmet_templates <- list(noobs=file.path(template_dir,"CALMET_template.INP"), 
+                         surfobs=file.path(template_dir,"CALMET_surfObs_template.inp"))
 
-calpost_exe <- file.path("C:/CALPUFF/CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe")
+calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template.INP")       # No mercury in emission file 
+# calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template_Hg.INP")  # Mercury (Hg) in emission file 
+
+pu_templates <- list (sumruns="AfsinFut_postutil_sumruns.inp",
+                      repartition = file.path(template_dir, "Mintia_postutilRepartition_noHg.inp"),  # No mercury in emission file 
+                      # repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),     # Mercury (Hg) in emission file 
+                      deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
+                      total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))  # No mercury in emission file
+                      # total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))     # Mercury (Hg) in emission file 
+
 calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOutput_calpost.inp"), 
                           deposition = file.path(template_dir, "Mintia_depo_calpost.inp"))
 
@@ -253,9 +255,8 @@ if (emission_type == "varying") {
     emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
     run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    shell.exec(normalizePath(bat_file))
+    # shell.exec(normalizePath(bat_file))
   }
-  
 }
 
 # POST PROCESSING ##############################################################
@@ -270,19 +271,21 @@ for(run in queue) {
     output_dir=output_dir,
     # sources=NULL,      # calpuff_result$sources,
     files_met=out_files, # calpuff_result$out_files,
-    pm10fraction=NULL,   # calpuff_result$pm10fraction,
+    pm10fraction=NULL,   # calpuff_result$pm10fraction, # For mercury (Hg)
     pu_exe=pu_exe,
     pu_templates=pu_templates,
     calpost_exe=calpost_exe,
     calpost_templates=calpost_templates,
     run_name=post_processing_run_name,
     calpuff_inp=calpuff_result$inpfiles_created,
-    # nper=8760,  # Number of run hours for PU (CP will run over a calendar year).
-    METRUN=1,     # Set 1 to run CALPOST on all periods in file, for both PU and CP. Good for test.
+    # nper=8760,    # Number of run hours for PU (CP will run over a calendar year).
+    # METRUN=1,     # Set 1 in order to run CALPOST on all periods in file, for both PU and CP (good for tests).
     # Real cases : neither nper nor METRUN
     cp_species=c('PM25', 'TPM10', 'SO2', 'NO2'),
+    run_discrete_receptors=T,
     run_gridded_receptors=F,
-    run_deposition=F, # Don't run deposition when Hg emission data are not present
+    run_concentrations=T,  # For "repartition" and "total PM" (PU)
+    run_deposition=F,      # Do NOT run "deposition" (PU) if there is NO mercury in emission file
     run_pu=T,
     run_calpost=T,
   )
