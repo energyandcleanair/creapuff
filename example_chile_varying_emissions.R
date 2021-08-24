@@ -234,7 +234,7 @@ if (emission_type == "varying") {
     calpuff_result <- creapuff::runCalpuff(
       # emissions_data = emissions_data,     # For constant emissions 
       # source_names = source_names,         # Optional. If not set: read from emissions_data (if not present, set automatically)
-      # FGD = "T",                           # Optional. If not set: read from emissions_data (if not present an error occurs)
+      # FGD = "T",                           # Optional. If not set: read from emissions_data (if not present, an error occurs)
       receptors=receptors,                   # Optional. If not set: full domain grid
       o3dat=o3dat,                           # Optional. If not set: no surface data
       bgconcs=bgconcs,                       # Optional. If not set: std values
@@ -255,7 +255,7 @@ if (emission_type == "varying") {
     emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
     run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file))
+    # shell.exec(normalizePath(bat_file))  # 
   }
 }
 
@@ -263,9 +263,10 @@ if (emission_type == "varying") {
 queue = unique(emissions_data$emission_names)
 for(run in queue) {
   emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-  post_processing_run_name <- emission_data_run$emission_names  # Max 8 characters for CALPOST 
-  calpuff_run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
+  run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
   calpuff_result <- file.path(output_dir, paste0('calpuff_result_',run_name, '.RDS'))  %>% readRDS
+  
+  post_processing_run_name <- emission_data_run$emission_names  # Max 8-chars name, for CALPOST 
   
   creapuff::runPostprocessing(
     output_dir=output_dir,
