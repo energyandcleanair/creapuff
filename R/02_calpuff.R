@@ -158,7 +158,8 @@ runCalpuff <- function(
                    bgconcs = bgconcs,        
                    OZONE.DAT = o3dat,        
                    source_lines = source_lines,  
-                   addparams = addparams, 
+                   addparams = addparams,
+                   addsubgroups = addsubgroups,
                    receptors = receptors_selected)  -> 
                    # receptors=receptors %>% subset(include) %>% make_topo_rows) ->   # LC : subset (only if not NULL) outside the function call   
     inpfiles_created
