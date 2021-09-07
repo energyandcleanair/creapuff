@@ -1,12 +1,13 @@
+# Set up the environment
 # remotes::install_github("energyandcleanair/creapuff", dependencies=T, update=F)
 # devtools::reload(pkgload::inst("creapuff"))
 library(creapuff)
+library(readxl)
+library(lubridate)
+library(tidyverse)
+library(magrittr)
+library(pbapply)
 
-library("readxl")
-library("lubridate")
-library("tidyverse")
-library("magrittr")
-library("pbapply")
 
 # Parameters ###################################################################
 
@@ -14,11 +15,13 @@ library("pbapply")
 expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each direction (use negative values to crop)
 
-# project_dir="F:/projects/chile_test" # calpuff_data persistent disk (calpuff config data)
+project_dir="F:/projects/chile_test" # calpuff_data persistent disk (calpuff config data)
 # project_dir="Z:/projects/chile"      # network disk (wrf_data)
-project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
+# project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
 
 emission_type = "varying"  # Real emissions
+# emission_type = "constant"  # Real emissions
+
 # emission_type = "constant"  # Emissions and stations are NOT real, just a test case 
 if (emission_type == "constant") 
   input_xls <- file.path(project_dir,"emissions_test.xlsx") # File where constant-emission data are specified
@@ -30,7 +33,7 @@ if (emission_type == "varying") {
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored (if Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
 
-# ============================= General parameters =============================
+# ================================ General =====================================
 gis_dir <- "F:/gis"                         # The folder where we store general GIS data
 bc_dir  <- file.path(gis_dir, "background") # The folder with background atmospheric concentrations for O3, NH3, H2O2
 
@@ -74,7 +77,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 # )
 # browser()
 
-calmet_result = readRDS(file.path(output_dir,"calmet_result.RDS" ))
+calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
 
 
 # INPUT DATA ###################################################################
@@ -127,7 +130,7 @@ if (emission_type == "constant") {
   if(!is.null(emissions_data$FDG)) emissions_data$FDG=T
 
   # Test with less data
-  # emissions_data %<>% head(1)
+  emissions_data %<>% head(2)
   # emissions_data %<>% tail(1)
   # emissions_data <- rbind(emissions_data %>% head(1), emissions_data %>% tail(1))
 }
@@ -153,7 +156,7 @@ if (emission_type == "varying") {
   emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('data')
 
   # Test with less data
-  # emissions_data %<>% head(1)
+  emissions_data %<>% head(2)
   # emissions_data %<>% tail(1)
   # emissions_data <- rbind(emissions_data %>% head(1), emissions_data %>% tail(1))
 }
@@ -177,7 +180,7 @@ for(run in queue) {
 }
 
 # Select discrete receptors around sources
-nesfact_range = c(125,25,5)  # c(125,25,10) # c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
+nesfact_range = c(125,25,5)/10  # c(125,25,10) # c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
 sources <- emissions_data %>% to_spdf %>% spTransform(target_crs)
 receptors %<>% select_receptors(sources=sources,
                                 run_name = calmet_result$run_name,
@@ -186,7 +189,7 @@ receptors %<>% select_receptors(sources=sources,
                                 files_met=out_files)
 
 # Discrete receptor background grid
-receptors[receptors$Xkm %% 30 < 15 & receptors$Ykm %% 30 < 15 & receptors$nesfact==1, 'include'] <- T
+# receptors[receptors$Xkm %% 30 < 15 & receptors$Ykm %% 30 < 15 & receptors$nesfact==1, 'include'] <- T
 
 # Receptor check
 print(paste('Adding background grid:', calmet_result$run_name, sum(receptors$include), 'receptors'))
@@ -201,13 +204,14 @@ dev.off()
 
 # ========================== Background concentrations =========================
 # sources <- emissions_data %>% to_spdf %>% spTransform(target_crs)  
-bgconcs <- get_bg_concs(sources, mod_dir=bc_dir)
+bgconcs <- NULL # get_bg_concs(sources, mod_dir=bc_dir)
 o3dat <- NULL # Hourly ozone data file (NULL: no ozone monitoring stations)
 
 
 # CALPUFF ######################################################################
 if (emission_type == "constant") {
   calpuff_result <- creapuff::runCalpuff(
+  species_configuration = "so2_nox_pm_hg",       # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
   emissions_data = emissions_data,               # For constant emission data
   source_names = emissions_data$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
   FGD = emissions_data$FGD,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
@@ -222,15 +226,34 @@ if (emission_type == "constant") {
   calpuff_exe = calpuff_exe,
   calpuff_template = calpuff_template
 )
+  browser()
+  
 }
 
 if (emission_type == "varying") {
-  queue = unique(emissions_data$emission_names)
-  for(run in queue) {
-    emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
-    NPT2 <- emission_data_run$N_sources  # Number of emission sources per file
-    print(paste0("CALPUFF run name: ", run_name, ", n_sources: ", NPT2))
+
+  
+    run_name <- calmet_result$run_name
+    
+    # NPTDAT= nrow(emissions_data)
+    # PTDAT = emissions_data$Path
+    
+    # emissions_data %<>% head(1)
+    
+    NPTDAT=nrow(emissions_data)
+    
+    PTDAT_lines <- list()
+    for(i in 1:nrow(emissions_data)) 
+      PTDAT_lines[[emissions_data$Plants[i]]] <- paste0("! PTDAT = ",emissions_data$Path[i]," ! !END!")
+    
+    NPT2_lines <- list()
+    for(i in 1:nrow(emissions_data)) 
+      NPT2_lines[[emissions_data$Plants[i]]] <- paste0("! NPT2 = ",emissions_data$N_sources[i]," ! !END!")
+    
+    print(paste0("CALPUFF run name: ", run_name, ", Sources: ", PTDAT_lines))
+    
+    browser()
+    
     calpuff_result <- creapuff::runCalpuff(
       # emissions_data = emissions_data,     # For constant emissions 
       # source_names = source_names,         # Optional. If not set: read from emissions_data (if not present, set automatically)
@@ -239,9 +262,17 @@ if (emission_type == "varying") {
       o3dat=o3dat,                           # Optional. If not set: no surface data
       bgconcs=bgconcs,                       # Optional. If not set: std values
       species_configuration = "so2_nox_pm",  # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
-      addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
-                       PTDAT = emission_data_run$Path,
-                       NPT2 = NPT2),
+      # addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
+                       # PTDAT = emission_data_run$Path,
+                       # NPT2 = NPT2),
+      # addparams = list(NPTDAT = NPTDAT,           # For arbitrary-varying emissions
+      #                  PTDAT = PTDAT_lines,
+      #                  NPT2 = NPT2_lines),
+      addparams = list(NPTDAT = NPTDAT,
+                       NPT2=2),
+      addsubgroups = c(list(X0b = PTDAT_lines)),
+      # addsubgroups = c(list(X0b = PTDAT_lines),list(X13a = NPT2_lines)),
+      # addsubgroups %<>% )
       run_name=run_name,
       output_dir = output_dir,
       params_allgrids = calmet_result$params,
@@ -249,26 +280,27 @@ if (emission_type == "varying") {
       calpuff_exe = calpuff_exe,
       calpuff_template = calpuff_template
     )
-  } 
-  # Execute CALPUFF bat files
-  for(run in queue) {
-    emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
+
+    # Execute CALPUFF bat files
+    # run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file))  # 
-  }
+    # shell.exec(normalizePath(bat_file)) 
+    browser()
 }
 
-# POST PROCESSING ##############################################################
+# POST-PROCESSING ##############################################################
+# calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
+# names(inpfiles_created) <- gsub('.*/chile_|_CALPUFF.*\\.inp', '', inpfiles_created)
+
 queue = unique(emissions_data$emission_names)
 for(run in queue) {
   emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
   run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')
   calpuff_result <- file.path(output_dir, paste0('calpuff_result_',run_name, '.RDS'))  %>% readRDS
   
-  post_processing_run_name <- emission_data_run$emission_names  # Max 8-chars name, for CALPOST 
+  post_processing_run_name <- emission_data_run$emission_names  # Max 8-chars name, for CALPOST run
   
-  creapuff::runPostprocessing(
+  creapuff::runPostprocessing(  
     output_dir=output_dir,
     # sources=NULL,      # calpuff_result$sources,
     files_met=out_files, # calpuff_result$out_files,
@@ -281,12 +313,16 @@ for(run in queue) {
     calpuff_inp=calpuff_result$inpfiles_created,
     # nper=8760,    # Number of run hours for PU (CP will run over a calendar year).
     # METRUN=1,     # Set 1 in order to run CALPOST on all periods in file, for both PU and CP (good for tests).
-    # Real cases : neither nper nor METRUN
-    cp_species=c('PM25', 'TPM10', 'SO2', 'NO2'),
+    # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
+    cp_period_function = get_cp_period,
+    pu_start_hour = NULL,
+    cp_species=c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
     run_discrete_receptors=T,
     run_gridded_receptors=F,
     run_concentrations=T,  # For "repartition" and "total PM" (PU)
     run_deposition=F,      # Do NOT run "deposition" (PU) if there is NO mercury in emission file
+    run_timeseries = T,
+    run_hourly = c('PM25', 'NO2', 'SO2'),
     run_pu=T,
     run_calpost=T,
   )
