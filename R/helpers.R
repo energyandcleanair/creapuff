@@ -714,8 +714,8 @@ make_calpuff_inp <- function(files_met,
   params <- files_met %>% head(1) %>% make_params()
   
   #additional parameters
-  addparams$NREC = length(receptors)
-  addparams$NPT1 = length(source_lines) #/4  # LC
+  addparams$NREC = length(receptors)     # Number of receptors
+  addparams$NPT1 = length(source_lines)  # Number of point sources with constant stack parameters
   
   #met domains and data files
   print(paste0("Number of domains is ", nrow(files_met)))
