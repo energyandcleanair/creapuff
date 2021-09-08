@@ -305,13 +305,13 @@ creapuff::runPostprocessing(
 
 # Create a SUMRUNS template only for summing up (i.e., no need for nitrate reparation: MNITRATE = 0)
 pu_template_desinence <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
-pu_sumruns_template=paste0(first_cluster_name, pu_template_desinence$repartition)    
+pu_sumruns_template_generic=paste0(first_cluster_name, pu_template_desinence$repartition)    
 sumfiles = paste0(toupper(calmet_result$run_name),'_',toupper(names(inpfiles_created)), '.CON')  
-readLines(file.path(output_dir,pu_sumruns_template)) -> inp
+readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
 inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters in a CALPUFF input file
                        MNITRATE  =  0,             # Recompute the HNO3/NO3 partition for concentrations, for all sources combined
-                       UTLLST = paste0(file.path(output_dir,calmet_result$run_name),"-all_POSTUTIL_SUMRUNS.LST"),  # Output LST file
-                       UTLDAT = paste0(file.path(output_dir,calmet_result$run_name),"-all.CON")))                  # Output data file, for concentrations (.CON)
+                       UTLLST = paste0(file.path(output_dir,calmet_result$run_name),"_all_POSTUTIL_SUMRUNS.LST"),  # Output LST file
+                       UTLDAT = paste0(file.path(output_dir,calmet_result$run_name),"_all.CON")))                  # Output data file, for concentrations (.CON)
 
 # Fill the corresponding lines for input data (CALPUFF concentrations)
 con_line <- grep("!MODDAT=", gsub(" ", "", inp))   # Looking for input data file parameter, for CALPUFF concentration (.CON)
@@ -320,49 +320,55 @@ inp <- c(inp[1:(con_line-1)],
          inp[-1:-con_line])
 
 # Write the SUMRUNS template
-pu_sumruns_template_new <- paste0(file.path(output_dir,calmet_result$run_name),"-all_POSTUTIL_SUMRUNS.INP")
-writeLines(inp, pu_sumruns_template_new) 
+pu_sumruns_template_all <- paste0(file.path(output_dir,calmet_result$run_name),"_all_POSTUTIL_SUMRUNS.INP")
+writeLines(inp, pu_sumruns_template_all) 
+# 
 
 # Create and run the corresponding bat file 
-pu_sumruns_bat <- file.path(output_dir, paste0("pu_", calmet_result$run_name, "-all_SUMRUNS.bat"))
+pu_sumruns_bat <- file.path(output_dir, paste0("pu_", calmet_result$run_name, "_all_SUMRUNS.bat"))
 writeLines(c(paste("cd", output_dir),
-             paste0(pu_exe, " ", normalizePath(pu_sumruns_template_new)),
+             paste0(pu_exe, " ", normalizePath(pu_sumruns_template_all)),
              "pause"), 
            pu_sumruns_bat)
 # shell.exec(normalizePath(pu_sumruns_bat)) 
 
 
 # 2. Define PU INP, CP INP and bat files, for summed-up concentrations   
-name_original=paste(calmet_result$run_name,first_cluster_name,sep='_')  # e.g., chile_andin
-name_new=paste(calmet_result$run_name,"all",sep='-')                    # e.g., chile-all
+name_generic=paste(calmet_result$run_name, first_cluster_name,sep='_')  # e.g., chile_andin
+name_all=paste0(calmet_result$run_name, "_all")                         # e.g., chile_all
 
-# PU INP(s): change names of input and output parameters, from "first_cluster_name" to SUMRUNS value ( "project_name"-all)
-list.files(pattern=paste0('^',first_cluster_name,'_postutil')) -> pu_files
-for(f in pu_files) {
-  f %>% readLines %>% gsub(name_original, name_new, .) %>%  
-    writeLines(gsub(paste0('^', first_cluster_name), name_new, f))  
-}
+# PU INP(s): change names of input and output parameters, from "first_cluster_name" to SUMRUNS value ( "project_name"_all)
+file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_postutil'))) -> pu_files_generic
+#                                        list.files(pattern='^andin_postutil') -> pu_files
 
-# CP INP(s): change names of input and output parameters, from "first_cluster_name" to SUMRUNS value ( "project_name"-all)
-list.files(pattern=paste0('^',first_cluster_name,'_.*calpost')) -> cp_files
-for(f in cp_files) {
-  f %>% readLines %>% gsub(name_original, name_new, .) %>%  
-    gsub(first_cluster_name,name_new, .) %>% 
-    writeLines(gsub(paste0('^', first_cluster_name), name_new, f))  
+for(f in pu_files_generic) {
+  f %>% readLines %>% gsub(name_generic, name_all, .) %>%    
+    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), name_all, basename(f))))
+  }
+
+# CP INP(s): change names of input and output parameters, from "first_cluster_name" to SUMRUNS value ( "project_name"_all)
+file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_.*calpost'))) -> cp_files_generic
+for(f in cp_files_generic) {
+  f %>% readLines %>% gsub(name_generic, name_all, .) %>%  
+    gsub(first_cluster_name,name_all, .) %>% 
+    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), name_all, basename(f))))
 }
 
 # Bat files 
-list.files(pattern=paste0(first_cluster_name,'\\.bat')) -> bat_files
+file.path(output_dir,list.files(output_dir, pattern=paste0(first_cluster_name,'\\.bat'))) -> bat_files_generic
 for(f in bat_files) {
-  f %>% readLines %>% gsub(name_original, name_new, .) %>%  
-    gsub(first_cluster_name,name_new, .) %>% 
-    writeLines(gsub(paste0(first_cluster_name), name_new, f))  
+  f %>% readLines %>% gsub(name_generic, name_all, .) %>%  
+    gsub(first_cluster_name,name_all, .) %>% 
+    writeLines(file.path (output_dir, gsub(paste0(first_cluster_name), name_all, basename(f))))
 }
-pu_bat <- file.path(output_dir, paste0("pu_", name_new, ".bat"))
+pu_bat <- file.path(output_dir, paste0("pu_", name_all, ".bat"))
 # shell.exec(normalizePath(pu_bat)) 
-cp_bat <- file.path(output_dir, paste0("calpost_", name_new, ".bat"))
+cp_bat <- file.path(output_dir, paste0("calpost_", name_all, ".bat"))
 # shell.exec(normalizePath(cp_bat)) 
 
+# Remove generic INP and bat files
+file.remove(pu_files_generic)
+file.remove(cp_files_generic)
 
 # 3. Run all bat files, in sequence
 system2(pu_sumruns_bat) -> exit_code
@@ -413,8 +419,6 @@ for(i in seq(1,length(calpuff_results_all))) {
   )
 } 
 
-
-# 
 # queue = unique(emissions_data$emission_names)
 # for(run in queue) {
 #   emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
