@@ -27,7 +27,7 @@ emission_type = "varying"  # Real emissions
 # emission_type = "constant"  # Emissions and stations are NOT real, just a test case 
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
-  input_xls <- file.path(project_dir,"emissions_test.xlsx") # File where constant-emission data are specified
+  input_xls <- file.path(emissions_dir,"emissions_test.xlsx") # File where constant-emission data are specified
 }
   
 if (emission_type == "varying") {
@@ -77,6 +77,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 #   only_make_additional_files=F,
 #   run_calmet = T
 # )
+# 
 # browser()
 
 calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
@@ -285,7 +286,8 @@ files_met <- calpuff_results_all[[1]]$out_files  # All clusters have the same me
 first_cluster_inp <- inpfiles_created[1]
 first_cluster_name <- names(inpfiles_created)[1]
 
-# Create a "generic" PU and CP INP files (run PostProcessing only for the first cluster, run_pu=F, run_calpost=F)
+# Create a "generic" PU and CP INP files
+# Postprocessing is run only for the first cluster, with : run_pu=F, run_calpost=F
 creapuff::runPostprocessing(
   calpuff_inp=first_cluster_inp,
   output_dir=output_dir,
@@ -338,7 +340,7 @@ writeLines(c(paste("cd", output_dir),
 
 # 2. Define PU and CP INP and bat files, for summed-up concentrations   
 name_generic=paste(calmet_result$run_name, first_cluster_name,sep='_')  # e.g., chile_andin  # TO DO : delete calmet_result$run_name in run name !
-name_all="all"  # e.g., chile_all
+name_all="all"  
 
 # PU INP: change names of input and output parameters, from generic "first_cluster_name" to SUMRUNS value (name_all)
 file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_postutil'))) -> pu_files_generic
