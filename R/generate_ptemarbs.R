@@ -27,20 +27,20 @@ generate_ptemarbs <- function(folder,
                               begin_date=min(emissions$date),
                               end_date=max(emissions$date)){
   
-  tmp_dir <- folder
+  dir.create(folder, showWarnings = F)
   
-  message("Checking sources and emissions data:", end=" ")
+  message("Checking sources and emissions data")
   ptemarb.check_input(sources, emissions, species)
   
-  message("Preparing directory: ", tmp_dir)
-  f_sources <- file.path(tmp_dir,"sources.csv")
+  message("Preparing directory: ", folder)
+  f_sources <- file.path(folder,"sources.csv")
   write_csv(sources, f_sources)
-  f_emissions <- file.path(tmp_dir,"emissions.csv")
+  f_emissions <- file.path(folder,"emissions.csv")
   emissions$date<-strftime(emissions$date,"%Y-%m-%d %H:%M")
   write_csv(emissions, f_emissions)
   
   message("Generating config file")
-  f_config = normalizePath(file.path(tmp_dir, "config.json"))
+  f_config = normalizePath(file.path(folder, "config.json"))
   ptemarb.create_config_file(
     folder=folder,
     scenario=scenario,
@@ -54,7 +54,7 @@ generate_ptemarbs <- function(folder,
   )
   
   message("Running python script")
-  python_exec <- reticulate::virtualenv_python("creapuff") 
+  python_exec <- "python3" #reticulate::virtualenv_python("creapuff") 
   exec_folder <- file.path(system.file(package="creapuff"),"python")
   f_mainpy <- "generate_ptemarb.py"
   command <- paste("cd", exec_folder, "; ", python_exec, f_mainpy, f_config, sep = " ")
