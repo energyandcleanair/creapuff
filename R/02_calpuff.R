@@ -62,7 +62,7 @@ runCalpuff <- function(
   calpuff_dir <- dirname(calpuff_exe)
   
   if(!is.null(emissions_data)) {
-    #default Hg speciation in %, FGD flue gas desulfurization (FGD) systems
+    # Default Hg speciation in %. FGD : flue gas desulfurization (FGD) systems
     "FGD  HG0 RGM Hgp
   F 43.9  54  2.1
   T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
