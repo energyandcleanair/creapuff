@@ -1,0 +1,18 @@
+[
+  {
+    "OUTPUT_FOLDER": "/Users/ht/development/crea/creapuff/tmp",
+    "SOURCES_FILE": "/Users/ht/development/crea/creapuff/tmp/sources.csv",
+    "EMISSIONS_FILE": "/Users/ht/development/crea/creapuff/tmp/emissions.csv",
+    "BEGIN_DATE": "2016-01-01",
+    "END_DATE": "2017-01-01",
+    "PREFIX": "ptemarb_",
+    "DATASET": "PTEMARB.DAT",
+    "DATAVER": "2.1",
+    "SCENARIO": "scenario",
+    "UTCZONE": "UTC+0100",
+    "SPECIES": [{"NAME":"SO2","WEIGHT":32},{"NAME":"NO","WEIGHT":30},{"NAME":"NO2","WEIGHT":36},{"NAME":"PPM25","WEIGHT":1}],
+    "RECORD_DURATION_SEC": 3600,
+    "DEFAULT_STACK_HEIGHT": 85,
+    "DEFAULT_STACK_DIAMETER": 5
+  }
+]
