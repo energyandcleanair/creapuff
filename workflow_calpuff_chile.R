@@ -3,6 +3,7 @@
 # devtools::reload(pkgload::inst("creapuff"))
 library(creapuff)
 library(readxl)
+library(writexl)
 library(lubridate)
 library(tidyverse)
 library(magrittr)
@@ -10,14 +11,13 @@ library(pbapply)
 
 
 # Parameters ###################################################################
-
 # ============================= Project specific ===============================
 expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each direction (use negative values to crop)
 
 # project_dir="F:/projects/chile_test" # calpuff_data persistent disk (calpuff config data)
-project_dir="Z:/projects/chile"      # network disk (wrf_data)
-# project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
+# project_dir="Z:/projects/chile"      # network disk (wrf_data)
+project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
 
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored (if Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
@@ -28,11 +28,14 @@ emission_type = "varying"  # Real emissions
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
   input_xls <- file.path(emissions_dir,"emissions_test.xlsx") # File where constant-emission data are specified
+  # Emission file, required fields: 
+  # Plants	Capacity[MW] Lat[deg]	Long[deg]	Status	COD[year]	SO2_tpa[t/y]	NOx_tpa[t/y]	PM_tpa[t/y]	Hg_kgpa[kg/y]	Exit temperature[C]	Stack diameter[m]	Stack height[m]	Flue gas velocity[m/s] FGD[logical]
 }
   
 if (emission_type == "varying") {
   emissions_dir <- file.path(project_dir,"emissions/2019") # Directory where arbitrary-varying emission files are stored
-  input_xls <- file.path(emissions_dir,"coordinates.xlsx") # Where plant positions are reported
+  # Corrected version file, for tres_puentes power plant position (erroneous location in the original PTEMARB.DAT file)
+  input_xls <- file.path(emissions_dir,"coordinates_corrected.xlsx") # Where plant positions are reported
 }
 
 # ================================ General =====================================
@@ -64,7 +67,6 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 
 
 # CALMET #######################################################################
-
 # calmet_result <- creapuff::runCalmet(
 #   input_xls = input_xls,
 #   wrf_dir = wrf_dir,
@@ -77,7 +79,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 #   only_make_additional_files=F,
 #   run_calmet = T
 # )
-# 
+#  
 # browser()
 
 calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
@@ -108,15 +110,15 @@ if (emission_type == "constant") {
   emissions_data$COD %>% substr(.,nchar(.)-3,nchar(.)) %>% as.numeric () <   
     calmet_result$start_dates[[1]] %>% format("%Y") %>% as.numeric() ->  
     emissions_data$existing
-  emissions_data$status = ifelse(emissions_data$existing,'operating', 'future')  
+  emissions_data$Status = ifelse(emissions_data$existing,'operating', 'future')  
 
   # Selection of operating/future plants
-  # emissions_data %<>% filter(status == "operating")
+  # emissions_data %<>% filter(Status == "operating")
 
   # Produce unique ascii names with 8 characters
   emissions_data$Plants %>% gsub(' ', '', .) %>% substr(1,5) %>% stringi::stri_trans_general("Latin-ASCII") %>%  
     make.names %>% make.unique(sep='') %>% 
-    paste0('_', substr(emissions_data$status,1,1)) -> emissions_data$emission_names
+    paste0('_', substr(emissions_data$Status,1,1)) -> emissions_data$emission_names
   if (emissions_data$emission_names %>% nchar %>% max > 8) stop("ERROR in plant-name length (too much plants with the same name?)")                        
 
   # Ensure numeric values of lat and long  
@@ -126,7 +128,8 @@ if (emission_type == "constant") {
   # Create polygons of grid boundaries  
   dom_pols = grids_to_domains(calmet_result$grids, target_crs)
   
-  # Exclude sources outside domain  
+  # Exclude sources outside domain  #   
+  # latlon_crs = CRS("+proj=longlat +datum=WGS84")
   emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('data')
   
   # If not specified, define if/which emission sources have FGD  
@@ -159,20 +162,24 @@ if (emission_type == "varying") {
   emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('data')
 
   # Test with less data
-  emissions_data %<>% head(1)
+  # emissions_data_plus_nueva <- emissions_data
+  # emissions_data %<>% filter(Plants!='nueva_tocopilla')
+  # emissions_data %<>% head(1)
   # emissions_data %<>% tail(1)
   # emissions_data <- rbind(emissions_data %>% head(1), emissions_data %>% tail(1))
 }
 
 # ============================== Receptors =====================================
-nesting_factors = c(1,5,15)   # c(1,2,5,15) # MESHDN parameter (in CALPUFF.INP) which defines the grid spacing 
-                              # (DGRIDKM/MECHDN) of each disk, wrt the grid spacing of the outer 
-                              # meteo grid (DGRIDKM). Higher factor: higher density of receptors.
+# MESHDN parameter (in CALPUFF.INP) which defines the grid spacing 
+# (DGRIDKM/MECHDN) of each disk, wrt the grid spacing of the outer 
+# meteo grid (DGRIDKM). Higher factor: higher density of receptors.
+nesting_factors = c(1,5,15)  
+
 if(!exists('receptors')) receptors = list()
 queue = unique(emissions_data$emission_names)
 for(run in queue) {
-  emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-  loc <- emission_data_run %>% to_spdf %>% spTransform(target_crs)
+  emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
+  loc <- emissions_data_run %>% to_spdf %>% spTransform(target_crs)
   # Get discrete receptors with 400x400 dim 
   get_recep(loc = loc, 
             run_name = calmet_result$run_name,
@@ -220,6 +227,7 @@ if (emission_type == "constant") {
   receptors = receptors,                         # Optional. If not set: full domain grid 
   o3dat = o3dat,                                 # Optional. If not set: no surface data
   bgconcs = bgconcs,                             # Optional. If not set: std values
+  species_configuration = "so2_nox_pm",          # Two possible values: "so2_nox_pm", "so2_nox_pm_hg"
   # addparams = addparams,                       # Optional. If not set: std values
   run_name = calmet_result$run_name,
   output_dir = output_dir,
@@ -231,15 +239,11 @@ if (emission_type == "constant") {
 }
 
 if (emission_type == "varying") {
-  
-  
   queue = unique(emissions_data$emission_names)
   for(run in queue) {
-    emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
-
-    NPT2 <- emission_data_run$N_sources  # Number of emission sources per file
-    
+    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
+    run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
+    NPT2 <- emissions_data_run$N_sources  # Number of emission sources per file
     print(paste0("CALPUFF run name: ", run_name, ", n_sources: ", NPT2))
     
     calpuff_result <- creapuff::runCalpuff(
@@ -249,9 +253,9 @@ if (emission_type == "varying") {
       receptors=receptors,                   # Optional. If not set: full domain grid
       o3dat=o3dat,                           # Optional. If not set: no surface data
       bgconcs=bgconcs,                       # Optional. If not set: std values
-      species_configuration = "so2_nox_pm",  # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
+      species_configuration = "so2_nox_pm",  # Two possible values: "so2_nox_pm", "so2_nox_pm_hg"
       addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
-                       PTDAT = emission_data_run$Path,
+                       PTDAT = emissions_data_run$Path,
                        NPT2 = NPT2),
       run_name=run_name,
       output_dir = output_dir,
@@ -264,8 +268,8 @@ if (emission_type == "varying") {
   
   # Execute each CALPUFF bat file
   for(run in queue) {
-    emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
+    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
+    run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
 
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
     # shell.exec(normalizePath(bat_file)) 
@@ -273,21 +277,135 @@ if (emission_type == "varying") {
 }
 
 
-# POST-PROCESSING ##############################################################
+browser()
 
+# POST-PROCESSING ##############################################################
 # ============================ All clusters together ============================
 # 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
-
-# Load all CAPUFF results
+# Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
 calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
-names(inpfiles_created) <- gsub(paste0('.*/',calmet_result$run_name,'_|_CALPUFF.*\\.inp'), '', inpfiles_created)
-files_met <- calpuff_results_all[[1]]$out_files  # All clusters have the same meteo
+names(calpuff_results_all) <- gsub(paste0('.*/',calmet_result$run_name,'_|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
+names(inpfiles_created) <- names(calpuff_results_all)
+
+# ========================== Scenario definition ===============================
+# All data, 26 elements. 
+
+# --- Scenario ScAll : currently operating plants (2019). 13 (over 13) coal and 13 gas plants.
+# scenario_prefix <- "ScAll"      # Max 8-char string
+# included_stations = c("Andin",  # Coal (2040)
+#                       "Guaco",  # Coal (2040)
+#                       "Santa1", # Coal (2040) (Santa Maria)
+#                       # "Norge",  # Coal (2040) - Composed by 2 units, already included in Tocop (6 units)
+#                       
+#                       "Angam",  # Coal (2025)
+#                       "Bocam",  # Coal (2025)
+#                       "Cochr",  # Coal (2025)
+#                       "Mejil",  # Coal (2025)
+#                       "Tocop",  # Coal (2025+2040) - Also includes Norge (2040)
+#                       "Venta",  # Coal (2025)
+#                       "Venta1", # Coal (2025)
+#                       "Venta2", # Coal (2025)
+#                       "Venta3", # Coal (2025)
+# 
+#                       "Ataca",  # Gas
+#                       "Cande",  # Gas
+#                       "Cordo",  # Gas
+#                       "Huasc",  # Gas
+#                       "Los_P",  # Gas
+#                       "Los_V",  # Gas
+#                       "Nehue",  # Gas
+#                       "Quint",  # Gas
+#                       "Renca",  # Gas
+#                       "San_i",  # Gas
+#                       "San_i1", # Gas
+#                       "Santa",  # Gas (Santa Lidia)
+#                       "Talta"   # Gas
+#                       )
+                     
+# # --- Scenario B : short-term phase-out scenario. 4 (over 13, 9 off) coal and 13 gas plants (shutdown deadlines lass/equal to 2025 are off).
+# scenario_prefix <- "ScB"
+# included_stations = c(
+#                       "Andin",  # Coal (2040)
+#                       "Guaco",  # Coal (2040)
+#                       "Santa1", # Coal (2040) (Santa Maria)
+#                       "Norge",  # Coal (2040) - Composed by 2 units, already included in Tocop (6 units)
+# 
+#                       # "Angam",  # Coal (2025)
+#                       # "Bocam",  # Coal (2025)
+#                       # "Cochr",  # Coal (2025)
+#                       # "Mejil",  # Coal (2025)
+#                       # "Tocop",  # Coal (2025+2040)
+#                       # "Venta",  # Coal (2025)
+#                       # "Venta1", # Coal (2025)
+#                       # "Venta2", # Coal (2025)
+#                       # "Venta3", # Coal (2025)
+# 
+#                       "Ataca",  # Gas
+#                       "Cande",  # Gas
+#                       "Cordo",  # Gas
+#                       "Huasc",  # Gas
+#                       "Los_P",  # Gas
+#                       "Los_V",  # Gas
+#                       "Nehue",  # Gas
+#                       "Quint",  # Gas
+#                       "Renca",  # Gas
+#                       "San_i",  # Gas
+#                       "San_i1", # Gas
+#                       "Santa",  # Gas (Santa Lidia)
+#                       "Talta"   # Gas
+#                       )
+
+# --- Scenario C : long-term phase-out scenario.  0 (over 13, 13 off) coal and 13 gas plants (shutdown deadlines lass/equal to 2040 are off).
+scenario_prefix <- "ScC"  
+included_stations = c(
+                      # "Andin",  # Coal (2040)
+                      # "Guaco",  # Coal (2040)
+                      # "Santa1", # Coal (2040) (Santa Maria)
+                      # "Norge",  # Coal (2040) - Composed by 2 units, already included in Tocop (6 units)
+                      #
+                      # "Angam",  # Coal (2025)
+                      # "Bocam",  # Coal (2025)
+                      # "Cochr",  # Coal (2025)
+                      # "Mejil",  # Coal (2025)
+                      # "Tocop",  # Coal (2025+2040)
+                      # "Venta",  # Coal (2025)
+                      # "Venta1", # Coal (2025)
+                      # "Venta2", # Coal (2025)
+                      # "Venta3", # Coal (2025)
+
+                      "Ataca",  # Gas
+                      "Cande",  # Gas
+                      "Cordo",  # Gas
+                      "Huasc",  # Gas
+                      "Los_P",  # Gas
+                      "Los_V",  # Gas
+                      "Nehue",  # Gas
+                      "Quint",  # Gas
+                      "Renca",  # Gas
+                      "San_i",  # Gas
+                      "San_i1", # Gas
+                      "Santa",  # Gas (Santa Lidia)
+                      "Talta"  # Gas
+                      )
+
+# --- Scenario D : new emission standards (?)
+# scenario_prefix <- "ScD"
+# included_stations = c("")
+
+calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
+inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
+emissions_data %>% filter(emissions_data$emission_names %in% names(inpfiles_created)  == TRUE)  -> emissions_data_scenario
+write_xlsx(list("CALPUFF input"=emissions_data_scenario), file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")))
+
+# ==============================================================================
+# 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
+# - concentrations (.CON), no need for nitrate reparation (MNITRATE = 0), a further run will do the repartition
+files_met <- out_files  # calpuff_results_all[[1]]$out_files  # All clusters have the same meteo
 first_cluster_inp <- inpfiles_created[1]
 first_cluster_name <- names(inpfiles_created)[1]
 
-# Create a "generic" PU and CP INP files
-# Postprocessing is run only for the first cluster, with : run_pu=F, run_calpost=F
+# Generate "generic" PU and CP INP files (only for the first cluster, run_pu=F, run_calpost=F)
 creapuff::runPostprocessing(
   calpuff_inp=first_cluster_inp,
   output_dir=output_dir,
@@ -310,28 +428,32 @@ creapuff::runPostprocessing(
   calpost_templates=calpost_templates
 )
 
-# Create a SUMRUNS template only for summing up (i.e., no need for nitrate reparation: MNITRATE = 0)
+# Read generic inp files
 pu_template_desinence <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
 pu_sumruns_template_generic=paste0(first_cluster_name, pu_template_desinence$repartition)    
-sumfiles = paste0(toupper(calmet_result$run_name),'_',toupper(names(inpfiles_created)), '.CON')  
 readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
+
+# Define current input-data list  
+sumfiles = paste0(toupper(calmet_result$run_name),'_',toupper(names(inpfiles_created)), '.CON')  
+
+# Fill generic inp files with current parameters and output-data names 
 inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters in a CALPUFF input file
                        MNITRATE  =  0,             # Recompute the HNO3/NO3 partition for concentrations, for all sources combined
-                       UTLLST = file.path(output_dir,"all_POSTUTIL_SUMRUNS.LST"),  # Output LST file
-                       UTLDAT = file.path(output_dir,"all.CON")))                 # Output data file, for concentrations (.CON)
+                       UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.LST")),  # Output LST file
+                       UTLDAT = file.path(output_dir,paste0(scenario_prefix,".CON"))))                  # Output data file, for concentrations (.CON)
 
-# Fill the corresponding lines for input data (CALPUFF concentrations)
-con_line <- grep("!MODDAT=", gsub(" ", "", inp))   # Looking for input data file parameter, for CALPUFF concentration (.CON)
+# Fill the corresponding lines for with current input-data list (CALPUFF outputs)
+con_line <- grep("!MODDAT=", gsub(" ", "", inp))    # Looking for input-data position index 
 inp <- c(inp[1:(con_line-1)],
          paste("   ",1:length(sumfiles),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles),"! !END!"),
          inp[-1:-con_line])
 
-# Write the SUMRUNS template
-pu_sumruns_template_all <- file.path(output_dir, "all_POSTUTIL_SUMRUNS.INP")
+# Write the _POSTUTIL_SUMRUNS.INP 
+pu_sumruns_template_all <- file.path(output_dir, paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.INP"))
 writeLines(inp, pu_sumruns_template_all) 
 
-# Create and run the corresponding bat file 
-pu_sumruns_bat <- file.path(output_dir, paste0("pu_all_SUMRUNS.bat"))
+# Create the _SUMRUNS.bat bat file
+pu_sumruns_bat <- file.path(output_dir, paste0("pu_",scenario_prefix,"_SUMRUNS.bat"))
 writeLines(c(paste("cd", output_dir),
              paste0(pu_exe, " ", normalizePath(pu_sumruns_template_all)),
              "pause"), 
@@ -339,33 +461,32 @@ writeLines(c(paste("cd", output_dir),
 
 
 # 2. Define PU and CP INP and bat files, for summed-up concentrations   
-name_generic=paste(calmet_result$run_name, first_cluster_name,sep='_')  # e.g., chile_andin  # TO DO : delete calmet_result$run_name in run name !
-name_all="all"  
+name_generic=paste(calmet_result$run_name, first_cluster_name,sep='_')  # e.g., chile_andin  
 
-# PU INP: change names of input and output parameters, from generic "first_cluster_name" to SUMRUNS value (name_all)
+# PU INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
 file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_postutil'))) -> pu_files_generic
 for(f in pu_files_generic) {
-  f %>% readLines %>% gsub(name_generic, name_all, .) %>%    
-    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), name_all, basename(f))))
+  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%    
+    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
   }
 
-# CP INP: change names of input and output parameters, from generic "first_cluster_name" to SUMRUNS value (name_all)
+# CP INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
 file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_.*calpost'))) -> cp_files_generic
 for(f in cp_files_generic) {
-  f %>% readLines %>% gsub(name_generic, name_all, .) %>%  
-    gsub(first_cluster_name,name_all, .) %>% 
-    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), name_all, basename(f))))
+  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
+    gsub(first_cluster_name, scenario_prefix, .) %>% 
+    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
 }
 
 # Bat files 
 file.path(output_dir,list.files(output_dir, pattern=paste0(first_cluster_name,'\\.bat'))) -> bat_files_generic
 for(f in bat_files_generic) {
-  f %>% readLines %>% gsub(name_generic, name_all, .) %>%  
-    gsub(first_cluster_name,name_all, .) %>% 
-    writeLines(file.path (output_dir, gsub(paste0(first_cluster_name), name_all, basename(f))))
+  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
+    gsub(first_cluster_name, scenario_prefix, .) %>% 
+    writeLines(file.path (output_dir, gsub(paste0(first_cluster_name), scenario_prefix, basename(f))))
 }
-pu_bat <- file.path(output_dir, paste0("pu_", name_all, ".bat"))       # shell.exec(normalizePath(pu_bat)) 
-cp_bat <- file.path(output_dir, paste0("calpost_", name_all, ".bat"))  # shell.exec(normalizePath(cp_bat)) 
+pu_bat <- file.path(output_dir, paste0("pu_", scenario_prefix, ".bat"))       # shell.exec(normalizePath(pu_bat)) 
+cp_bat <- file.path(output_dir, paste0("calpost_", scenario_prefix, ".bat"))  # shell.exec(normalizePath(cp_bat)) 
 
 # Remove generic INP and bat files
 file.remove(pu_files_generic)
@@ -424,10 +545,10 @@ for(i in seq(1,length(calpuff_results_all))) {
 
 # queue = unique(emissions_data$emission_names)
 # for(run in queue) {
-#   emission_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-#   run_name <- paste(calmet_result$run_name, emission_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
+#   emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
+#   run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
 #   calpuff_result <- file.path(output_dir, paste0('calpuff_result_',run_name, '.RDS'))  %>% readRDS
-#   post_processing_run_name <- emission_data_run$emission_names  # Max 8-chars name, for CALPOST run
+#   post_processing_run_name <- emissions_data_run$emission_names  # Max 8-chars name, for CALPOST run
 #   
 #   creapuff::runPostprocessing(
 #     calpuff_inp=calpuff_result$inpfiles_created,
