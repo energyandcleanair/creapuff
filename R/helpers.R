@@ -530,8 +530,6 @@ get_out_files <- function(runDir, out_file_ext, batch_subset=NULL) {
 }
 
 
-
-
 #function to set parameters in a CALPUFF input file
 set_puff <- function(inpfile, paramdf, set.all=T) {
   if(!is.data.frame(paramdf))
@@ -588,9 +586,11 @@ make_params <- function(out_files) {
       IBYR = substr(out_files$StartDate, 1, 4),
       IBMO = substr(out_files$StartDate, 5, 6),
       IBDY=substr(out_files$StartDate, 7, 8),
+      IBHR=substr(out_files$StartDate, 9, 10),
       IEYR=substr(out_files$EndDate, 1, 4),
       IEMO=substr(out_files$EndDate, 5, 6),
       IEDY=substr(out_files$EndDate, 7, 8),
+      IEHR=substr(out_files$EndDate, 9, 10),
       
       #timezone
       ABTZ=TZstring(out_files$TZ),
@@ -690,10 +690,11 @@ make_calpuff_inp <- function(files_met,
                              calpuff_template,
                              output_dir=unique(dirname(files_met$METDAT)),
                              puffrun=NULL,
-                             sourceLines=NULL,
+                             source_lines=NULL,
                              receptors=NULL,
                              OZONE.DAT=NULL,
-                             bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
+                             # bgconcs=lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=','),
+                             bgconcs=NULL,
                              addparams=list(),
                              addsubgroups=list()) {
   
@@ -713,8 +714,8 @@ make_calpuff_inp <- function(files_met,
   params <- files_met %>% head(1) %>% make_params()
   
   #additional parameters
-  addparams$NREC = length(receptors)
-  addparams$NPT1 = length(sourceLines)/4
+  addparams$NREC = length(receptors)     # Number of receptors
+  addparams$NPT1 = length(source_lines)  # Number of point sources with constant stack parameters
   
   #met domains and data files
   print(paste0("Number of domains is ", nrow(files_met)))
@@ -725,7 +726,7 @@ make_calpuff_inp <- function(files_met,
     addparams$METDAT = file.path(output_dir, paste0(files_met$grid_name,"_CALMET.DAT")) %>% gsub('//', '/', .)
   
   if(is.null(files_met$grid_name)) stop('grid_name cannot be NULL')
-  for(r in 1:5) {
+  for(r in 1: max( nrow(files_met),5)) {  # LC
     gridLevelAvailable <- (!is.na(files_met[r,"grid_name"]) & nrow(files_met)>1)
     addparams[[paste0('DOMAIN',r)]] <-
       ifelse(gridLevelAvailable,
@@ -734,7 +735,7 @@ make_calpuff_inp <- function(files_met,
     
     addparams[[paste0('METDAT',r)]] <- 
       ifelse(gridLevelAvailable,
-             file.path(files_met[r, "dir"],
+             file.path(output_dir, #files_met[r, "dir"],  # LC
                        paste0(files_met[r,"grid_name"],"_CALMET.DAT")) %>% 
                gsub('//', '/', .),
              "not set")
@@ -749,9 +750,10 @@ make_calpuff_inp <- function(files_met,
   addparams$PUFLST = paste0(file_out,"_CALPUFF.LST")
   
   #background concentrations
-  addparams$MOZ = ifelse(!is.null(OZONE.DAT), 1, 0)
+  addparams$MOZ = ifelse(!is.null(OZONE.DAT), 1, 0)  # 0 = use a monthly background ozone value; 1 = read hourly ozone concentrations from OZONE.DAT data file
   addparams$MNH3 = 0
   addparams$MH2O2 = 0
+  if (is.null(bgconcs)) lapply(list(O3=rep(25, 12),NH3=rep(10, 12),H2O2=rep(1, 12)), paste, collapse=',') -> bgconcs
   addparams$BCKO3 = ifelse(!is.null(OZONE.DAT), "not set", bgconcs$O3)
   addparams$BCKNH3 = bgconcs[["NH3"]]
   if(is.null(bgconcs[["H2O2"]])) bgconcs[["H2O2"]]=bgconcs[["H2O_"]]
@@ -765,7 +767,7 @@ make_calpuff_inp <- function(files_met,
   #remove discrete receptors and emissions sources from calpuff INP
   calpuff_inp %<>% clean_inp()
   
-  if(!is.null(sourceLines)) addsubgroups %<>% c(list(X13b = sourceLines))
+  if(!is.null(source_lines)) addsubgroups %<>% c(list(X13b = source_lines))
   if(!is.null(receptors))   addsubgroups %<>% c(list(X20c = receptors))
   
   for(sg in names(addsubgroups))
@@ -773,6 +775,7 @@ make_calpuff_inp <- function(files_met,
   
   #write into file
   outF <- file.path(output_dir, paste0(puffrun,"_CALPUFF_7.0.inp"))
+  if(is.list(calpuff_inp)) calpuff_inp %<>% unlist()  # LC
   writeLines(calpuff_inp, outF)  
   
   return(outF)
@@ -880,8 +883,8 @@ get_recep <- function(loc,
                    JESAMP=min(JBSAMP+rng-1, GridNY),
                    DATUM='WGS-84',
                    MESHDN=nesfact,
-                   ITEST=1, #STOPS program after SETUP phase
-                   NPT1=0) #no emission sources
+                   ITEST=1,  # STOPS program after SETUP phase
+                   NPT1=0)  # No emission sources
     
     #remove discrete receptors and emissions sources from calpuff INP
     grep('^Subgroup \\(13b\\)', calpuff_inp) -> psst
@@ -942,14 +945,15 @@ select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_fac
     receptors$include[receptors$dist_to_source<nesfact_range[i] & receptors$nesfact==nesting_factors[i]] <- T
   
   print(paste(run_name, sum(receptors$include), 'receptors'))
-  if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
+  # if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000*2) stop('too many receptors!')  # LC : *2
+  if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
   
   plotadm = creahelpers::get_adm(0, 'coarse') %>% cropProj(r)
-  quickpng(file.path(output_dir, paste(run_name, 'receptors.png'))  )   
+  quickpng(file.path(output_dir, paste0(run_name, '_', 'receptors.png'))  )
   receptors %>% subset(include) %>% sp::plot(col='gray', cex=.5)
-  plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
+  plotadm %>% sp::plot(add=T, border='steelblue')  
   
-  sources %>% sp::plot(add=T)
+  sources %>% sp::plot(add=T, lwd=3)
   dev.off()
   
   return(receptors)

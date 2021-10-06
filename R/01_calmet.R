@@ -142,7 +142,7 @@ runCalmet <- function(
     annotation_spatial(sources, col='orange')
   ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
   
-  surf.dat <- NA  # NA : don't make SURF.DAT and run without it. 
+  surf.dat <- NA  # NA = don't make SURF.DAT and run without it. 
   
   #make GEO.DAT and CALMET.INP files
   params_allgrids <- list()
@@ -264,11 +264,11 @@ runCalmet <- function(
       params[nrow(params)+1,] <- c('SRFDAT', paste0(out_files$dir[i],surf.dat))
     }
     
-    # LC : make CALMET.INP (in CALMET dir)
+    # Make CALMET.INP (in CALMET dir)
     calmet_templates$noobs %>% readLines -> calmetinp
     set_puff(calmetinp, params) -> inp.out
     
-    #add all m3d files
+    # Add all m3d files
     m3d_loc = grep('M3DDAT', inp.out)
     m3d_lines = paste('MM51.DAT       input     1  ! M3DDAT =',
                       m3d_to_use,

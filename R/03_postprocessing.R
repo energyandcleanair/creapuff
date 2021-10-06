@@ -21,7 +21,7 @@ runPostprocessing <- function(
   files_met=NULL,
   output_dir=unique(files_met$dir),
   pm10fraction,
-  METRUN = 0, #set 1 to run CALPOST on all periods in file
+  METRUN = 0,  # Set 1 to run CALPOST on all periods in file
   nper = NULL,
   pu_start_hour = NULL,
   cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
@@ -44,17 +44,17 @@ runPostprocessing <- function(
   calpost_exe = "C:/Calpuff/CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe"
   ){
   
-  #generate POSTUTIL and CALPOST .inp files
+  # Generate POSTUTIL and CALPOST .inp files
   pu.inp.out <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
   cp.inp.out <- calpost_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
 
-  #read CALPUFF.INP
+  # Read CALPUFF.INP
   puffInp <- readLines(calpuff_inp)
   
   params <- data.frame(name=NA,val=NA)
   inparams <- data.frame(cpuname=NA,name=NA)
   
-  #set params read from CALPUFF.INP
+  # Set params read from CALPUFF.INP
   inparams[1,c('name', 'cpuname')] <- c("ISYR","IBYR")
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("ISMO","IBMO")
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("ISDY","IBDY")
@@ -69,13 +69,13 @@ runPostprocessing <- function(
   
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("BCKNH3","BCKNH3")
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("MODDAT","CONDAT")
-  inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT1")
+  if(nrow(files_met)==1) inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT") 
+  else inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT1")
   
   params <- inparams
   params$val <- NA
-  
   for(p in 1:nrow(inparams)) {
-    puffInp %>% gsub(" ", "", .) %>% 
+    puffInp %>% gsub(" ", "", .) %>% gsub("//", "/", .) %>% gsub("\\", "/", ., fixed=T) %>% 
       get_param_val(params$cpuname[p], .) -> params$val[p]
   }
   
@@ -84,7 +84,7 @@ runPostprocessing <- function(
   
   conF <- params$val[params$name=='MODDAT']
 
-  #calculate POSTUTIL time period if not set
+  # Calculate POSTUTIL time period if not set
   if(is.null(pu_start_hour)) {
     params$val[params$name == 'ISHR'] %<>% as.numeric %>% add(2)
   } else params$val[params$name == 'ISHR'] <- pu_start_hour
@@ -99,22 +99,22 @@ runPostprocessing <- function(
   
   params %<>% dplyr::select(-cpuname) %>% filter(!grepl("^IE", name))
   
-  #set params determined by program
+  # Set params determined by program
   params[nrow(params)+1,] <- c('UTLLST', gsub("\\.CON", "_POSTUTIL_REPART.LST", conF))
   params[nrow(params)+1,] <- c('UTLDAT', gsub("\\.CON", "_repart.CON", conF))
   params[nrow(params)+1,] <- c('NPER', nper)
   
   if(run_concentrations) {
     if(!is.null(files_met))
-      params[params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(path) %>% 
+      params[params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(METDAT) %>%
         head(1)
     
-    #write repartitioning INP file
+    # Write repartitioning INP file
     write_input(pu_templates$repartition, 
                 file.path(output_dir, paste0(run_name, pu.inp.out$repartition)),
                 params)
     
-    #write_input file to calculate total PM
+    # Write_input file to calculate total PM
     params[params$name == 'MODDAT', 'val'] <- params[params$name == 'UTLDAT', 'val']
     params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_TotalPM.CON", conF)
     params[params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
@@ -126,7 +126,7 @@ runPostprocessing <- function(
   }
   
   if(run_deposition) {
-    #write deposition INP file
+    # Write deposition INP file
     pu.depo.out = file.path(output_dir, paste0(run_name, pu.inp.out$deposition))
     params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", ".WET", conF)
@@ -137,7 +137,7 @@ runPostprocessing <- function(
                 pu.depo.out,
                 params)
     
-    #add the Hg fraction in PM
+    # Add the Hg fraction in PM
     pu.depo.out %>% readLines -> pu.depo
     pu.depo %>% gsub(' ', '', .) %>% grep("!CSPECCMP=Hg!", .) -> hgcmp_startline
     pu.depo %>% gsub(' ', '', .) %>% grep("!PM10=", .) %>% 
@@ -146,7 +146,7 @@ runPostprocessing <- function(
     writeLines(pu.depo, pu.depo.out)
   }
 
-  #make CALPOST INP files
+  # Make CALPOST INP files
   cp.period = cp_period_function(params)
 
   params %<>% subset(name == 'ABTZ')
@@ -164,8 +164,9 @@ runPostprocessing <- function(
     params[nrow(params)+1,] <- c('IEHR', hour(cp.period$end))
   }
   
-  output_dir_cp <- paste0(gsub('\\$|/$','',output_dir), '\\')
+  output_dir_cp <- paste0(gsub('\\$|/$','',output_dir), '/')
   params[nrow(params)+1,] <- c('MODDAT', gsub("\\.CON", "_TotalPM.CON", conF))
+  params[nrow(params)+1,] <- c('PSTLST', gsub("\\.CON", "_CALPOST.LST", conF))
   params[nrow(params)+1,] <- c('TSUNAM', cp_run_name)
   params[nrow(params)+1,] <- c('TUNAM', cp_run_name)
   params[nrow(params)+1,] <- c('PLPATH', output_dir_cp,"not set")
@@ -174,8 +175,8 @@ runPostprocessing <- function(
   params[nrow(params)+1,] <- c("LG", run_gridded_receptors %>% as.character %>% substr(1,1))
   
   if(run_concentrations) {
-    #write_input file to get all concentration outputs
-    
+    # write_input file to get all concentration outputs
+  
     species_params = list(LTIME=ifelse(run_timeseries, 'T', 'F'),
                           ASPEC   = cp_species %>% paste(collapse=', '),
                           ILAYER  = rep(1, length(cp_species)) %>% paste(collapse=', '),
@@ -196,7 +197,7 @@ runPostprocessing <- function(
   }
   
   if(run_deposition) {
-    #write_input file to get all deposition outputs
+    # Write_input file to get all deposition outputs
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
     write_input(calpost_templates$deposition, 
                 file.path(output_dir, paste0(run_name, cp.inp.out$deposition)),
@@ -204,7 +205,7 @@ runPostprocessing <- function(
                 set.all=F) 
   }
   
-  #make bat files to run POSTUTIL and CALPOST
+  # Make bat files to run POSTUTIL and CALPOST
   pu.bat <- file.path(output_dir, paste0("pu_", run_name, ".bat"))
   
   pu_runs = NULL
@@ -223,10 +224,10 @@ runPostprocessing <- function(
   
   calpost.bat <- file.path(output_dir, paste0("calpost_", run_name, ".bat"))
   writeLines(c(paste("cd", output_dir),
-               paste0(calpost_exe, " ", file.path(output_dir, 
-                                                  paste0(run_name, cp.inp.out[cp_runs]))), "pause"), 
+               paste0(calpost_exe, " ", normalizePath(file.path(output_dir, 
+                                                  paste0(run_name, cp.inp.out[cp_runs])))), "pause"), 
              calpost.bat)
   
-  if(run_pu) system(sprintf('cmd /c "%s"',normalizePath(pu.bat)))
+  if(run_pu) system(sprintf('cmd /c "%s"', normalizePath(pu.bat)))
   if(run_calpost) system(sprintf('cmd /c "%s"',normalizePath(calpost.bat)))
 }
