@@ -12,15 +12,16 @@ library(readxl)
 scenario_prefix_ref<- "ScAll"
 
 # Select macro scenario
-scenario_prefix <- "ScAll" ; scenario_description='Coal and Gas FPPs (2019)'
-scenario_prefix <- "ScB" ; scenario_description='Coal and Gas FPPs (SPS-2025)'
-scenario_prefix <- "ScC" ; scenario_description='Gas FPPs (LPS-2040)'
+scenario_prefix <- "ScAll" ; scenario_description='Operating&Proposed' # All stations : operating and proposed
+# scenario_prefix <- "ScB" ; scenario_description='Operating'          # Currently operating
+# scenario_prefix <- "ScC"    
 
-project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
-# project_dir="Z:/projects/chile"        # calpuff_external_data persistent disk (project data)
+project_dir="H:/projects/cambodia"       # calpuff_external_data-2 persistent disk (project data)
+# project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
+# project_dir="Z:/projects/chile"        # network disk (project data)
 output_dir <- file.path(project_dir, "calpuff_suite") # Where to write all generated files
 # output_dir <- "F:/TAPM/Drax/" # Where to write all generated files
-emissions_dir <- file.path(project_dir, "emissions/2019") # Directory where arbitrary-varying emission files are stored
+emissions_dir <- file.path(project_dir, "emissions") # Directory where arbitrary-varying emission files are stored
 input_xls <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")) # Where plant positions are reported
 input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_ref,".xlsx")) # Where plant positions are reported
 
@@ -39,8 +40,7 @@ UTMZ <- calmet_result$params[[01]]$IUTMZN
 UTMH <- calmet_result$params[[01]]$UTMHEM
 
 # List generated tif files
-calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".csv"), gasunit = 'ug', dir=output_dir)
-# calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".csv"), gasunit = 'ug', dir=output_dir, hg_scaling=1e-3)
+calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".csv"), gasunit = 'ug', dir=output_dir, hg_scaling=1)#e-3)
 grids = get_grids_calpuff(calpuff_files, UTMZ, UTMH, map_res=1)
 
 # Select data and make tif
@@ -49,13 +49,12 @@ grids = get_grids_calpuff(calpuff_files, UTMZ, UTMH, map_res=1)
 calpuff_files %>% make_tifs(grids = grids)
 
 # Select tif data 
-calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".tif"), gasunit = 'ug', dir=output_dir)
+calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".tif"), gasunit = 'ug', dir=output_dir, hg_scaling=1)#1e-3)
 # calpuff_files <- get_calpuff_files(ext=".tif", gasunit = 'ug', dir=output_dir)
 
 # Read list of modeled plants
 # plants <- read_csv('F:/TAPM/Drax/stations.txt')
 # plants <- read_csv(input_xls)
-# plants <- read_xlsx(input_xls, sheet='CALPUFF input')
 plants <- read_xlsx(input_xls_ref, sheet='CALPUFF input')
 
 target_crs = get_utm_proj(UTMZ, UTMH, units = 'km')
@@ -81,27 +80,29 @@ plot_bb <- plants %>% extent %>% magrittr::add(400)
 cities <- get_cities(plot_bb, grids)
 # cities$pos[cities$name == 'Kingston upon Hull'] <- 4
 
-# I set max values, using colorkeybasis=TRUE
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ]  = 1.3 #2.0
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm25" ] = 0.9 #
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="tpm10" ] = 1.2 #1.25
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ]  = 2.0 #3.0
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ]  = 13 #30
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="pm25" ] = 9
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="tpm10" ] = 15 #18
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ]  = 25 #45
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ]  = 150 #200
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="pm25" ] = 30 #70
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ]  = 100 #350
-
-# calpuff_files %<>% filter(calpuff_files$species=="no2")
+# I set max values, to use them, put colorkeybasis=TRUE
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm" ]    = 0.15 # fly ash, [kg/ha/yr], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="hg" ]    = 625  # mercury, [mg/ha/yr], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2eq" ] = 32   # acid,    [kg/ha/yr SO2-equivalent], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ]   = 0.25 # [ug/m3], concentrations
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm25" ]  = 2.4  # [ug/m3]
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="tpm10" ] = 2.3  # [ug/m3]
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ]   = 1.3  # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ]   = 1.5  # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="pm25" ]  = 17   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="tpm10" ] = 18   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ]   = 17   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ]   = 9    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="pm25" ]  = 90   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ]   = 70   # [ug/m3]
 
 #output plots and exposure results
 plot_results(calpuff_files,
-             scenario_names = paste0(scenario_description),
+             scenario_names = paste0(scenario_description, ' CFPPs'),
              dir=output_dir, 
              plants=plants,
              cities=cities,
+             # plot_km=c(400,800),
              colorkeybasis=TRUE,
              # plant_names='Drax',
              # plant_names=plants@data$Plants,
