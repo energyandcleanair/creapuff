@@ -301,7 +301,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   calpuff_files[grep("tflx",calpuff_files$name),"unit"] <- "kg/ha/yr"
   
   calpuff_files[calpuff_files$species == 'hg','scale'] %<>% multiply_by(1e6 * hg_scaling)
-  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in kg in CALPUFF.'))
+  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in t in CALPUFF.'))
   calpuff_files[calpuff_files$species == 'hg','unit'] <- "mg/ha/yr"
   
   calpuff_files$hr <- as.numeric(gsub("[_hr]","",calpuff_files$hr))
@@ -334,14 +334,27 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   }
   
   #exceedance thresholds - these will be recorded and included as a threshold level in contour plots
+  # WHO-2021 : https://www.who.int/news-room/fact-sheets/detail/ambient-(outdoor)-air-quality-and-health
+  # NAAQS : https://www.epa.gov/criteria-air-pollutants/naaqs-table
   calpuff_files$threshold <- NA
-  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==24,"threshold"] <- 20 #WHO
-  calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"] <- 200 #WHO
-  calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"] <- 25 #WHO
-  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"] <- 50 #WHO
-  calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 #Great lakes study
-  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==1,"threshold"] <- 75/0.355 #U.S. NAAQS
+  calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"]               <- 15  # WHO-2021 [ug/m3]
+  calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr > 7000,"threshold"]            <- 5   # WHO-2021
+  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"]                <- 45  # WHO-2021
+  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr > 7000,"threshold"]             <- 5   # WHO-2021 
+  calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"]                  <- 100*46.01*0.0409 ## U.S. NAAQS at 1atm, 25°C (EPA)  # 98th percentile of 1-hour daily maximum concentrations, averaged over 3 years
+  calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==24,"threshold"]                 <- 25  # WHO-2021 
+  calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr > 7000,"threshold"]              <- 10  # WHO-2021 
+  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==1,"threshold"]                  <- 75*64.06*0.0409 # U.S. NAAQS at 1atm, 25°C (EPA)  # 99th percentile of 1-hour daily maximum concentrations, averaged over 3 years
+  calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==24,"threshold"]                 <- 40  # WHO-2021
+  calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 # Great lakes study
   calpuff_files$threshold.plotunit <- calpuff_files$threshold * calpuff_files$plotscale
+  
+  # calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==24,"threshold"]                 <- 20  # WHO-2005
+  # calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"]                  <- 200 # WHO-2005
+  # calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"]               <- 25  # WHO-2005
+  # calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"]                <- 50  # WHO-2005
+  # calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 # Great lakes study
+  # calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==1,"threshold"]                  <- 75/0.355 # U.S. NAAQS  at 1atm, 0°C 
   
   return(calpuff_files)
 }
