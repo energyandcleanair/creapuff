@@ -1,12 +1,8 @@
 
 #' Generate CALPUFF input
 #'
-#' @param input_xls 
-#' @param start_date 
 #' @param wrf_dir 
-#' @param expand_grids 
 #' @param output_dir 
-#' @param grids 
 #' @param params_allgrids 
 #' @param gis_dir 
 #' @param calpuff_exe 
@@ -19,32 +15,33 @@
 #' @examples
 runCalpuff <- function(
   run_name,
-  input_xls,
-  start_date, # Used to know which power plants are 'operating' or 'new'
-  wrf_dir,
-  mod_dir,
-  expand_grids,
-  output_dir,
-  grids,
   params_allgrids,
-  gis_dir,
-  calpuff_exe,
+  emissions_data=NULL, #data.frame with emissions data for all sources
+  source_names=NULL,
+  FGD=NULL,
+  species_configuration=NULL, # "so2_nox_pm" or "so2_nox_pm_hg"
+  emitted_polls = list(so2_nox_pm_hg=c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM','Hgp'),  # LC: add Hgp specie
+                       so2_nox_pm=c('SO2','NO','NO2','PM15','PM10','PPM25'))[[species_configuration]],
+  receptors=NULL,
+  bgconcs = NULL,
+  o3dat = NULL,
+  addparams = list(),
+  addsubgroups = NULL,
+  output_dir=unique(dirname(params_allgrids$METDAT)),
+  gis_dir=get_gis_dir(),
+  calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe',
   only_make_additional_files=F,
-  calpuff_template
+  calpuff_template = list(so2_nox_pm_hg=system.file("extdata", "CALPUFF_7.0_template_Hg.INP", package="creapuff"),
+                          so2_nox_pm=system.file("extdata", "CALPUFF_7.0_template.INP", package="creapuff"))[[species_configuration]]
 ){
   
   result = list() # Storing results we'll need for CALPUFF
   
   # Normalise paths: CALPUFF doesn't like ~
-  wrf_dir %<>% normalizePath()
   output_dir %<>% normalizePath()
   gis_dir %<>% normalizePath()
   calpuff_exe %<>% normalizePath()
   
-  # Read from input
-  target_crs <- raster::crs(grids[[1]])
-  
-  # params_allgrids = readRDS(file.path(output_dir, paste0('params_allgrids_', run_name, '.RDS')))
   params_allgrids %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% mutate(run_name=run_name) %>% 
     mutate_at(c('DGRIDKM', 'XORIGKM', 'YORIGKM', 'NX', 'NY'), as.numeric) %>% 
     rename(UTMZ=IUTMZN,
@@ -54,135 +51,78 @@ runCalpuff <- function(
            GridNY=NY,
            GridX=XORIGKM,
            GridY=YORIGKM) %>% 
-    mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
-           EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
+    mutate(StartDate=paste(IBYR, IBMO, IBDY,IBHR) %>% ymd_h %>% format("%Y%m%d%H"),
+           EndDate=paste(IEYR, IEMO, IEDY,IEHR) %>% ymd_h %>% format("%Y%m%d%H"),
            TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> out_files
   
+  target_crs <- get_utm_proj(zone = unique(out_files$UTMZ), hem = unique(out_files$UTMH)) # LC
+  
   out_files$dir <- output_dir
-  if(!exists('out_files_all')) out_files -> out_files_all
   
-  #create multiple .INP files for individual sources or source clusters
   calpuff_dir <- dirname(calpuff_exe)
-
-  ## Viet
-  read_xlsx(input_xls, sheet='CALPUFF input') -> emis # LC
   
-  ## define which sources should be included in which scenario. COD = commercial operation date
-  emis$COD %>% substr(.,nchar(.)-3,nchar(.)) %>% as.numeric () < start_date %>% format(., format = "%Y") %>% as.numeric() -> emis$existing_plant # LC
-  emis$Status_Simple = ifelse(emis$existing_plant,'operating', 'new')
-  
-  
-  #produce unique ascii names with 8 characters -Lauri -LC
-  emis$Plants %>% gsub(' ', '', .) %>% substr(1,5) %>% stringi::stri_trans_general("Latin-ASCII") %>% 
-    make.names %>% make.unique(sep='') %>% 
-    paste0('_', substr(emis$Status_Simple,1,1)) -> emis$scenario
-  # LC : using full names. I see no need for shortness, but I do for clarity  
-  #emis$Plants %>% gsub(' ', '', .) %>% stringi::stri_trans_general("Latin-ASCII") %>% 
-  #  make.names %>% make.unique(sep='') %>% 
-  #  paste0('_', emis$Status_Simple) -> emis$scenario
-  emis$scenario %>% nchar %>% max
-  
-  #combine emissions data with out_files
-  emis$run_name <- out_files$run_name %>% unique
-  merge(emis, out_files[, c('run_name', 'UTMZ', 'UTMH')], all.x=T, all.y=F) %>% unique -> sources
-  
-  sources$Lat %<>% as.numeric()
-  sources$Long %<>% as.numeric()
-  
-  #exclude sources outside domain  -Lauri
-  domains <- grids_to_domains(grids, target_crs)
-  sources %<>% to_spdf %>% crop(spTransform(domains, crs(.))) %>% '@'('data')
-  
-  sources$source.name <- sources$scenario # LC
-  sources$puffrun <- sources$scenario
-  #all plants have FGD -Lauri
-  sources$FGD = T
-  #Hg speciation in % -Lauri # LC, FGD flue gas desulfurization (FGD) systems
-  "FGD  HG0 RGM Hgp
+  if(!is.null(emissions_data)) {
+    # Default Hg speciation in %. FGD : flue gas desulfurization (FGD) systems
+    "FGD  HG0 RGM Hgp
   F 43.9  54  2.1
   T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
-    mutate_if(is.numeric, divide_by, 100) ->
-    hg_species
-  #rename columns to use default variable names -Lauri
-  sources %<>% rename(Stack.height=contains("Stack height"), 
-                      velocity=contains("velocity"),
-                      diameter = contains("Diameter"),
-                      exit.temp = contains("Temperature"))
-  
-  # outDir = runDir()
-  
-  #---------------------- 
-  #get receptors for all
-  nesfactL = c(3, 9) #nesting factor of 24 with resolution of 9km would be overkill! -Lauri
-  nesfact_range = c(30, 10)
-  if(!exists('topoAll')) topoAll = list()
-  
-  queue = unique(sources$source.name)
-  
-  for(run in queue) {
+      mutate_if(is.numeric, divide_by, 100) ->
+      hg_species
     
-    outF = sources %>% filter(source.name == run) %>% head(1)
+    #rename columns to use default variable names
+    emissions_data %<>% rename(Stack.height=contains("Stack height"), 
+                        velocity=contains("velocity"),
+                        diameter = contains("Diameter"),
+                        exit.temp = contains("Temperature"))
     
-    target_crs = get_utm_proj(outF$UTMZ, outF$UTMH)
+    inpfiles_created <- character(0)
     
-    loc = outF %>% to_spdf %>% spTransform(target_crs)
+    inpfiles_created <- list()
+    runsources_out=list()
+    pm10fraction=list()
     
-    #get discrete receptors with 400x400 dim and 1km, 2.5km, 10km resos
-    get_recep(loc,
-              nesfactL=nesfactL,
-              output_dir=output_dir,
-              calpuff_exe=calpuff_exe,
-              calpuff_template=calpuff_template,
-              out_files_all=out_files_all,
-              target_crs=target_crs) -> topoAll[[run]]
-    
-    print(run)
-  }
-  
-  bgconcs = get_bg_concs(sources,  mod_dir=file.path(gis_dir, "background"))
-  
-  o3dat = NULL #NULL : hourly Ozone Data File (Optional). No ozone monitoring stations, in both PH or Vietnam
-  
-  inpfiles_created <- character(0)
-  
-  emitted.polls = c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM')
-  
-  inpfiles_created <- list()
-  runsources_out=list()
-  pm10fraction=list()
-  
-  queue = sources$run_name %>% unique
-  for(metrun in queue) {
-    sources %>% filter(run_name == metrun) %>% to_spdf -> runsources
-    files_met <- out_files_all %>% filter(run_name == unique(runsources$run_name))
-    
-    targetcrs = get_utm_proj(files_met$UTMZ[1], files_met$UTMH[1])
-    runsources %<>% spTransform(targetcrs)
+    emissions_data %>% to_spdf() %>% spTransform(.,target_crs) -> runsources
     runsources %>% coordinates() %>% data.frame() %>% 
       set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
-    runsources$base.elevation..msl <- get_plant_elev(runsources,
-                                                   dir=output_dir,
-                                                   out_files=files_met)
     
-    runsources@data %<>% mutate(SO2 = SO2_tpa,
-                                SO4 = 0,
-                                NO  = NOx_tpa * .95 * 30/46,
-                                NO2 = NOx_tpa * .05,
-                                HNO3 = 0,
-                                NO3 = 0,
-                                PM15 = PM_tpa * 26/80,
-                                PM10 = PM_tpa * 30/80,
-                                PPM25 = PM_tpa * 24/80,
-                                HG0 = Hg_kgpa * hg_species$HG0[match(runsources$FGD, hg_species$FGD)], 
-                                RGM = Hg_kgpa * hg_species$RGM[match(runsources$FGD, hg_species$FGD)],
-                                Hgp = Hg_kgpa * hg_species$Hgp[match(runsources$FGD, hg_species$FGD)],
-                                downwash = 0)
+    if (!is.null(source_names))  # LC : priority to external parameters
+      runsources$source_names <- source_names %>% gsub(' ', '', .) %>% substr(1,5) %>% make.names %>% make.unique(sep='')
+    else 
+      if (is.null(runsources$source_names)) {
+        source_names <- rep("s", nrow(emissions_data)) %>% make.names %>% make.unique(sep='')
+        runsources$source_names <- source_names
+      }
+    
+    ifelse (!is.null(FGD), FGD, ifelse(!is.null(runsources$FGD), runsources$FGD, stop("error : no information on FGD of emission sources"))
+            ) %>% as.logical() -> runsources$FGD # LC : priority to external parameters 
+
+    if(is.null(runsources$base.elevation..msl))
+      runsources$base.elevation..msl <- get_plant_elev(runsources,
+                                                       dir=output_dir,
+                                                       files_met=out_files)
+    
+    for(emission_col in c('SO2_tpa', 'NOx_tpa', 'PM_tpa', 'Hg_kgpa', emitted_polls, 'downwash'))
+      if(is.null(runsources[[emission_col]])) runsources[[emission_col]]=0
+    
+    if(!is.null(runsources$SO2)) runsources@data %<>% mutate(SO2 = SO2_tpa)  # LC, mutate if "!is.null"
+    
+    if(!is.null(runsources$NO)) runsources@data %<>% mutate(NO  = NOx_tpa * .95 * 30/46,  # LC, mutate if "!is.null"
+                                                           NO2 = NOx_tpa * .05)
+    
+    if(!is.null(runsources$PPM25)) runsources@data %<>% mutate(PM15 = PM_tpa * 26/80,  # LC, mutate if "!is.null"
+                                                              PM10 = PM_tpa * 30/80,
+                                                              PPM25 = PM_tpa * 24/80)
+    
+    if(!is.null(runsources$RGM)) 
+      runsources@data %<>% mutate(HG0 = Hg_kgpa * hg_species$HG0[match(runsources$FGD, hg_species$FGD)],  # LC, mutate if "!is.null"
+                                  RGM = Hg_kgpa * hg_species$RGM[match(runsources$FGD, hg_species$FGD)],
+                                  Hgp = Hg_kgpa * hg_species$Hgp[match(runsources$FGD, hg_species$FGD)])
     
     runsources$exit.temp %<>% (function(x) x+ifelse(x < 273, 273.15, 0))
     
     runsources@data %>% ungroup %>% 
-      sel(UTMx, UTMy, Stack.height, base.elevation..msl, diameter, velocity, exit.temp, downwash,
-          SO2,SO4,NO,NO2,HNO3,NO3,PM15,PM10,PPM25, HG0, RGM) -> runsources2
+      select(UTMx, UTMy, Stack.height, base.elevation..msl, diameter, velocity, exit.temp, downwash,
+             all_of(emitted_polls)) -> runsources2
     
     runsources2 %>% 
       mutate_all(signif, 6) %>% mutate_all(format, nsmall=1) %>% 
@@ -193,65 +133,50 @@ runCalpuff <- function(
     #(km)      (km)       (m)      (m)       (m)  (m/s) (deg. K)         
     #------   ---------- ---------- ------  ------   -------- ----- -------- ----- --------
     
-    sourceLines <- list()
+    source_lines <- list()
     for(i in 1:nrow(runsources))
-      sourceLines[[runsources$source.name[i]]] <- c(paste0("! SRCNAM =",runsources$source.name[i],"!"),
-                                                    paste("! X =", emislines[i], "!"),
+      source_lines[[runsources$source_names[i]]] <- c(paste0("! SRCNAM = ",runsources$source_names[i]," !"),
+                                                    paste("! X = ", emislines[i], "!"),
                                                     "! ZPLTFM  =       .0 !",
                                                     "! FMFAC  =      1.0 !   !END!")
-    
-    topoAll %>% do.call(rbind, .) -> intopo
-    intopo %<>% subset(!duplicated(coordinates(.)))
-    r=raster(extent(intopo), res=1, crs=crs(intopo))
-    
-    runsources$flag=1
-    sourcesR=rasterize(runsources, r, 'flag')
-    dist_to_source=distance(sourcesR)
-    extract(dist_to_source, intopo) -> intopo$dist_to_source
-    
-    intopo$include=F
-    
-    for(i in seq_along(nesfactL))
-      intopo$include[intopo$dist_to_source<nesfact_range[i] & intopo$nesfact==nesfactL[i]] <- T
-    
-    print(paste(metrun, sum(intopo$include), 'receptors'))
-    if(sum(intopo$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000) stop('too many receptors!')
-    
-    plotadm = getadm(gis_dir, 0, 'coarse') %>% cropProj(r) # LC : #
-    quickpng(file.path(output_dir, paste0(metrun, ' receptors.png'))  )   
-    intopo %>% subset(include) %>% sp::plot(col='gray', cex=.5)
-    plotadm %>% sp::plot(add=T, border='steelblue') # LC : #
-    
-    runsources %>% sp::plot(add=T)
-    dev.off()
-    
-    addparams = list(DATUM="WGS-84")
-    
-    for(puffrun in runsources$source.name) {
-      make_calpuff_inp(files_met,
-                       calpuff_template=calpuff_template,
-                       output_dir=output_dir,
-                       puffrun=puffrun,
-                       bgconcs = bgconcs[bgconcs$puffrun == puffrun,],
-                       OZONE.DAT = o3dat,
-                       sourceLines=sourceLines[[puffrun]],
-                       receptors=intopo %>% subset(include) %>% make_topo_rows,
-                       addparams = addparams,
-                       addsubgroups = NULL) ->
-        inpfiles_created[[puffrun]]
-      
-      pm10fraction[[puffrun]] = sum(runsources$Hgp) / sum(runsources$PM10)
-    }
   }
+  else
+  {
+    # LC, what if(is.null(emissions_data)) ?
+    source_lines=NULL  # LC
+    runsources=NULL    # LC
+  }  
   
-  #run CALPUFF
+  if(is.null(addparams$DATUM)) addparams$DATUM="WGS-84"
+  receptors_selected = NULL
+  if(!is.null(receptors)) receptors %>% subset(include) %>% make_topo_rows -> receptors_selected 
+  
+  make_calpuff_inp(out_files,
+                   calpuff_template=calpuff_template,
+                   output_dir=output_dir,
+                   puffrun=run_name,
+                   bgconcs = bgconcs,        
+                   OZONE.DAT = o3dat,        
+                   source_lines = source_lines,  
+                   addparams = addparams,
+                   addsubgroups = addsubgroups,
+                   receptors = receptors_selected)  -> 
+                   # receptors=receptors %>% subset(include) %>% make_topo_rows) ->   # LC : subset (only if not NULL) outside the function call   
+    inpfiles_created
+
+  if (species_configuration == "so2_nox_pm_hg") 
+    pm10fraction = sum(runsources$Hgp) / sum(runsources$PM10)
+  if (species_configuration == "so2_nox_pm") 
+    pm10fraction = NULL
+
+  # Run CALPUFF
   org_dir <- getwd()
   setwd(output_dir)
-  inpfiles_created %>% paste(calpuff_exe, .) %>% pbapply::pblapply(system)
+  # inpfiles_created %>% paste(calpuff_exe, .) %>% pbapply::pblapply(system)
   
-  #create .bat files to run CALPUFF
+  # Create .bat files to run CALPUFF
   inpfiles_created %>% split(1) -> batches
-  jobname='TESTVIET'
+  jobname=run_name
   for(i in seq_along(batches)) {
     batches[[i]] %>% paste(calpuff_exe, .) %>% c('pause') %>% 
       writeLines(paste0(jobname, '_', i, '.bat'))
@@ -260,9 +185,11 @@ runCalpuff <- function(
   
   # Results needed for PostProcessing
   result$inpfiles_created <- inpfiles_created
-  result$sources <- sources
-  result$out_files_all <- out_files_all
+  result$sources <- runsources   
+  result$out_files <- out_files  
   result$pm10fraction <- pm10fraction
+  
+  saveRDS(result, file.path(output_dir, paste0('calpuff_result_',run_name,'.RDS')))  # LC : save result
   
   return(result)
 }

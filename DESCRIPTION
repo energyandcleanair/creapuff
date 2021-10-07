@@ -44,8 +44,9 @@ Depends:
     creahelpers,
     rasterVis,
     plotKML
-Suggests: 
-    testthat(>= 2.1.0),
+Suggests:
+    knitr,
+    testthat(>= 2.1.0)
 VignetteBuilder:
     knitr
 RoxygenNote: 7.1.1

@@ -3,6 +3,7 @@ export("%>%")
 export(runCalmet)
 export(runCalpuff)
 export(runPostprocessing)
+export(generate_ptemarbs)
 exportPattern("^[[:alpha:]]|\\%+") # some helper functions can be used when doing hia
 
 importFrom(RColorBrewer,brewer.pal)
@@ -98,6 +99,7 @@ importFrom(readxl,read_xlsx)
 
 importFrom(readr, read_csv)
 importFrom(readr, write_csv)
+importFrom(readr, write_file)
 
 importFrom(rgeos,gContains)
 importFrom(rgeos,gBuffer)
