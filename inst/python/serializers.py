@@ -9,7 +9,6 @@ def serialize_header_general(config, cluster_group, station_emission_df):
 
     DATASET = config.get("DATASET", "PTEMARB.DAT")
     DATAVER = config.get("DATAVER", "2.1")
-    DATAMOD = config.get("DATAMOD", "")
     SCENARIO = config.get("SCENARIO")
     UTCZONE = config.get("UTCZONE")
 
@@ -36,7 +35,6 @@ def serialize_header_general(config, cluster_group, station_emission_df):
     header = template.format(
         DATASET=DATASET,
         DATAVER=DATAVER,
-        DATAMOD=DATAMOD,
         SCENARIO=SCENARIO,
         UTMZONE=UTMZONE,
         UTCZONE=UTCZONE,

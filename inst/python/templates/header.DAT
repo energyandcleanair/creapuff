@@ -1,4 +1,4 @@
-{DATASET} {DATAVER} {DATAMOD}              Comments, times with seconds, time zone, coord info
+{DATASET}     {DATAVER}             Comments, times with seconds, time zone, coord info
  1
 {SCENARIO}
 UTM

@@ -32,7 +32,8 @@ Imports:
     DescTools,
     elevatr,
     pbapply,
-    maptools
+    maptools,
+    reticulate
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
