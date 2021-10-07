@@ -666,6 +666,7 @@ readPuffInp <- function(file,
   
   file %>% readLines %>% gsub(" ", "", .) -> inp
   
+  inparams <- unique(c(inparams, additional_params))
   inparams %>% lapply(get_param_val, inp, max.number=Inf) %>% set_names(inparams) -> d
   
   d[['datadir']] <- dirname(d[['CONDAT']]) %>% paste0('/')
