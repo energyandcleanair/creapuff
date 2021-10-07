@@ -54,7 +54,7 @@ generate_ptemarbs <- function(folder,
   )
   
   message("Running python script")
-  python_exec <- "python3" #reticulate::virtualenv_python("creapuff") 
+  python_exec <- reticulate::conda_python("creapuff") 
   exec_folder <- file.path(system.file(package="creapuff"),"python")
   f_mainpy <- "generate_ptemarb.py"
   command <- paste("cd", exec_folder, "; ", python_exec, f_mainpy, f_config, sep = " ")
