@@ -151,7 +151,7 @@ plot_results <- function(calpuff_files,
           width = 3000, height = 2000, units = "px",
           bg = "white",res=200)
       
-      pl <- levelplot(crop(conc_R,plot_bb),
+      pl <- rasterVis::levelplot(crop(conc_R,plot_bb),
                       margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
                       par.settings=parSets,
                       main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +

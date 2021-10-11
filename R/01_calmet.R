@@ -207,14 +207,14 @@ runCalmet <- function(
       geo.out %>% writeLines(geo.file)
       
       quickpng(file.path(output_dir, paste0(grid_name, '_', 'terrain.png')))
-      levelplot(elev.out, col.regions=c('steelblue', terrain.colors(255)), margin=F, 
+      rasterVis::levelplot(elev.out, col.regions=c('steelblue', terrain.colors(255)), margin=F, 
                 main='Terrain elevations') -> p
       print(p)
       dev.off()
       
       values(lu.out) <- lc_codes$LCCOwnLabel[match(lu.out[], lc_codes$USGS.code)] %>% as.factor()
       quickpng(file.path(output_dir, paste0(grid_name, '_', 'landuse.png')))
-      levelplot(lu.out,main='Land use', 
+      rasterVis::levelplot(lu.out,main='Land use', 
                 col.regions=brewer.pal(12, 'Paired')[rev(c(1, 10, 4, 8, 3, 7))]) -> p
       print(p)
       dev.off()

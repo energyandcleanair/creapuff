@@ -33,7 +33,8 @@ Imports:
     elevatr,
     pbapply,
     maptools,
-    reticulate
+    reticulate,
+    rasterVis
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
@@ -43,7 +44,6 @@ Depends:
     ncdf4,
     ggplot2,
     creahelpers,
-    rasterVis,
     plotKML
 Suggests:
     knitr,
