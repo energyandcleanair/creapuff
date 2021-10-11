@@ -33,8 +33,7 @@ Imports:
     elevatr,
     pbapply,
     maptools,
-    reticulate,
-    rasterVis
+    reticulate
 Remotes:
     rich-iannone/PuffR,
     energyandcleanair/creahelpers
