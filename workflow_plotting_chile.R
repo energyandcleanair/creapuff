@@ -12,8 +12,8 @@ library(readxl)
 scenario_prefix_ref<- "ScAll"
 
 # Select macro scenario
-scenario_prefix <- "ScAll" ; scenario_description='Coal and Gas FPPs (2019)'
-scenario_prefix <- "ScB" ; scenario_description='Coal and Gas FPPs (SPS-2025)'
+# scenario_prefix <- "ScAll" ; scenario_description='Coal and Gas FPPs (2019)'
+# scenario_prefix <- "ScB" ; scenario_description='Coal and Gas FPPs (SPS-2025)'
 scenario_prefix <- "ScC" ; scenario_description='Gas FPPs (LPS-2040)'
 
 project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
@@ -26,8 +26,10 @@ input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_
 
 # ================================ General =====================================
 gis_dir <- "F:/gis"                         # The folder where we store general GIS data
+
 # creahia::set_env('gis_dir',"~/GIS/")
 # Sys.setenv(gis_dir="~/GIS/")
+#
 # setwd(get_gis_dir())
 # system("gsutil rsync -r gs://crea-data/gis .")
 
@@ -82,17 +84,17 @@ cities <- get_cities(plot_bb, grids)
 # cities$pos[cities$name == 'Kingston upon Hull'] <- 4
 
 # I set max values, using colorkeybasis=TRUE
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ]  = 1.3 #2.0
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ] = 1.3 #2.0
 calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm25" ] = 0.9 #
 calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="tpm10" ] = 1.2 #1.25
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ]  = 2.0 #3.0
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ]  = 13 #30
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ] = 2.0 #3.0
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ] = 13 #30
 calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="pm25" ] = 9
 calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="tpm10" ] = 15 #18
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ]  = 25 #45
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ]  = 150 #200
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ] = 25 #45
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ] = 150 #200
 calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="pm25" ] = 30 #70
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ]  = 100 #350
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ] = 100 #350
 
 # calpuff_files %<>% filter(calpuff_files$species=="no2")
 

@@ -12,9 +12,8 @@ library(readxl)
 scenario_prefix_ref<- "ScAll"
 
 # Select macro scenario
-scenario_prefix <- "ScAll" ; scenario_description='Operating&Proposed' # All stations : operating and proposed
-# scenario_prefix <- "ScB" ; scenario_description='Operating'          # Currently operating
-# scenario_prefix <- "ScC"    
+# scenario_prefix <- "ScAll" ; scenario_description='Operating&Proposed' # All stations : operating and proposed
+scenario_prefix <- "ScB" ; scenario_description='Operating'          # Currently operating
 
 project_dir="H:/projects/cambodia"       # calpuff_external_data-2 persistent disk (project data)
 # project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
@@ -27,8 +26,10 @@ input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_
 
 # ================================ General =====================================
 gis_dir <- "F:/gis"                         # The folder where we store general GIS data
+
 # creahia::set_env('gis_dir',"~/GIS/")
 # Sys.setenv(gis_dir="~/GIS/")
+#
 # setwd(get_gis_dir())
 # system("gsutil rsync -r gs://crea-data/gis .")
 
