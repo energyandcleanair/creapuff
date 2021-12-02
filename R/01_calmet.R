@@ -54,7 +54,7 @@ runCalmet <- function(
     tibble(path=file.path(wrf_dir, m3d), .)
   m3d$filename_start_date %<>% gsub(".m3d","",.) %>% paste(.,"00", sep = " ") %>%  ymd_h  # LC
   m3d$filename_end_date %<>% gsub(".m3d","",.) %>% paste(.,"23", sep = " ") %>%  ymd_h  # LC
-  end_date <- m3d$filename_end_date[length(m3d$filename_end_date)]  # LC
+  # end_date <- m3d$filename_end_date[length(m3d$filename_end_date)]  # LC
   run_name <- m3d$run_name[1] # LC
   
   #build a data frame with the header info from all files
@@ -154,7 +154,7 @@ runCalmet <- function(
     res=res(gridR)[1]
     
     start_date = m3d$starttime[m3d$grid_name==grid_name][1] + as.difftime(TZ, units='hours')
-    if(hour(start_date)>5) {
+    if(hour(start_date)>=5) {
       start_date %<>% add(as.difftime(1, units='days'))
       hour(start_date)=0
     }
