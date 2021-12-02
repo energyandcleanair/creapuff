@@ -18,7 +18,7 @@ expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each dir
 # project_dir="F:/projects/cambodia_test" # calpuff_data persistent disk (calpuff config data)
 # project_dir="Z:/projects/"              # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
 # project_dir="G:/projects/chile"         # calpuff_external_data persistent disk (project data)
-project_dir="H:/projects/cambodia"        # calpuff_external_data-2 persistent disk (project data)
+project_dir="H:/cambodia"        # calpuff_external_data-2 persistent disk (project data)
 
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 # output_dir_CALMET <- file.path(output_dir, "CALMET") # Where to write all generated files
@@ -248,7 +248,8 @@ if (emission_type == "constant") {
     emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
     run_name <- emissions_data_run$emission_names  
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file)) 
+    shell.exec(normalizePath(bat_file))
+    Sys.sleep(2)
   } 
   
   # All-in-one solution: only one CALPUFF simulation for all sources
@@ -305,6 +306,7 @@ if (emission_type == "varying") {
 
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
     # shell.exec(normalizePath(bat_file)) 
+    # Sys.sleep(2)
   }
 }
 
@@ -460,56 +462,57 @@ if(exit_code != 0) stop("errors in CALPOST execution")
 
 browser()
 
-# ============================= Plant by plant =================================
-scenario_prefix="plant_by_plant"
 
-# Load all CAPUFF results, from calpuff_result_*.RDS
-calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
-calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
-names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
-names(inpfiles_created) <- names(calpuff_results_all)
-
-# Select stations
-included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]  # Only for operating stations
-# included_stations <- names(inpfiles_created)  # All stations
-
-calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
-inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
-emissions_data %>% filter(emissions_data$emission_names %in% names(inpfiles_created)  == TRUE)  -> emissions_data_scenario
-write_xlsx(list("CALPUFF input"=emissions_data_scenario), file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")))
-
-for(i in seq(1,length(calpuff_results_all))) {
-  run_name <- names(calpuff_results_all[i])
-  calpuff_result <- calpuff_results_all[[i]]
-  print(paste0("Cluster name : ",run_name, " [", i,"/",length(calpuff_results_all),"]"))
-  
-  creapuff::runPostprocessing(
-    calpuff_inp=calpuff_result$inpfiles_created,
-    output_dir=output_dir,
-    files_met=calpuff_result$out_files,  # out_files
-    run_name=run_name,
-    # sources=NULL,        # calpuff_result$sources,
-    pm10fraction=calpuff_result$pm10fraction, # For mercury (Hg)
-    pu_exe=pu_exe,
-    pu_templates=pu_templates,
-    calpost_exe=calpost_exe,
-    calpost_templates=calpost_templates,
-    # nper=8760,    # Number of run hours for PU (CP will run over a calendar year).
-    # METRUN=1,     # Set 1 in order to run CALPOST on all periods in file, for both PU and CP (good for tests).
-    nper=NULL,      # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
-    METRUN=0,       # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
-    cp_period_function = get_cp_period,
-    pu_start_hour = NULL,
-    cp_species=c('PM25', 'TPM10', 'SO2', 'NO2'), #c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
-    run_discrete_receptors=T,
-    run_gridded_receptors=F,
-    run_concentrations=T,  # Run "repartition" and "total PM" (PU)
-    run_deposition=T,      # Do NOT run "deposition" (PU) if there is NO mercury in emission file
-    run_timeseries = T,
-    run_hourly = c('PM25', 'NO2', 'SO2'),
-    run_pu=T,
-    run_calpost=T,
-  )
-} 
+# # ============================= Plant by plant =================================
+# scenario_prefix="plant_by_plant"
+# 
+# # Load all CAPUFF results, from calpuff_result_*.RDS
+# calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
+# calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
+# names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
+# names(inpfiles_created) <- names(calpuff_results_all)
+# 
+# # Select stations
+# included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]  # Only for operating stations
+# # included_stations <- names(inpfiles_created)  # All stations
+# 
+# calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
+# inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
+# emissions_data %>% filter(emissions_data$emission_names %in% names(inpfiles_created)  == TRUE)  -> emissions_data_scenario
+# write_xlsx(list("CALPUFF input"=emissions_data_scenario), file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")))
+# 
+# for(i in seq(1,length(calpuff_results_all))) {
+#   run_name <- names(calpuff_results_all[i])
+#   calpuff_result <- calpuff_results_all[[i]]
+#   print(paste0("Cluster name : ",run_name, " [", i,"/",length(calpuff_results_all),"]"))
+#   
+#   creapuff::runPostprocessing(
+#     calpuff_inp=calpuff_result$inpfiles_created,
+#     output_dir=output_dir,
+#     files_met=calpuff_result$out_files,  # out_files
+#     run_name=run_name,
+#     # sources=NULL,        # calpuff_result$sources,
+#     pm10fraction=calpuff_result$pm10fraction, # For mercury (Hg)
+#     pu_exe=pu_exe,
+#     pu_templates=pu_templates,
+#     calpost_exe=calpost_exe,
+#     calpost_templates=calpost_templates,
+#     # nper=8760,    # Number of run hours for PU (CP will run over a calendar year).
+#     # METRUN=1,     # Set 1 in order to run CALPOST on all periods in file, for both PU and CP (good for tests).
+#     nper=NULL,      # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
+#     METRUN=0,       # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
+#     cp_period_function = get_cp_period,
+#     pu_start_hour = NULL,
+#     cp_species=c('PM25', 'TPM10', 'SO2', 'NO2'), #c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+#     run_discrete_receptors=T,
+#     run_gridded_receptors=F,
+#     run_concentrations=T,  # Run "repartition" and "total PM" (PU)
+#     run_deposition=T,      # Do NOT run "deposition" (PU) if there is NO mercury in emission file
+#     run_timeseries = T,
+#     run_hourly = c('PM25', 'NO2', 'SO2'),
+#     run_pu=T,
+#     run_calpost=T,
+#   )
+# } 
 
 

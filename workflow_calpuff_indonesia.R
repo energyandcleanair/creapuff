@@ -15,12 +15,12 @@ library(pbapply)
 expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each direction (use negative values to crop)
 
-# project_dir="F:/projects/chile_test" # calpuff_data persistent disk (calpuff config data)
-# project_dir="Z:/projects/"              # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
-# project_dir="G:/projects/chile"         # calpuff_external_data persistent disk (project data)
-# project_dir="G:/projects/india"         # calpuff_external_data persistent disk (project data)
-# project_dir="H:/projects/cambodia"      # calpuff_external_data-2 persistent disk (project data)
-project_dir="H:/projects/indonesia"       # calpuff_external_data-2 persistent disk (project data)
+# project_dir="F:/chile_test" # calpuff_data persistent disk (calpuff config data)
+# project_dir="Z:/"              # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
+# project_dir="G:/chile"         # calpuff_external_data persistent disk (project data)
+# project_dir="G:/india"         # calpuff_external_data persistent disk (project data)
+# project_dir="H:/cambodia"      # calpuff_external_data-2 persistent disk (project data)
+project_dir="H:/indonesia"       # calpuff_external_data-2 persistent disk (project data)
 
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 # output_dir_CALMET <- file.path(output_dir, "CALMET") # Where to write all generated files
@@ -84,7 +84,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 #   only_make_additional_files=F,
 #   run_calmet = T
 # )
-# 
+
 # browser()
 
 calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
@@ -331,14 +331,20 @@ names(inpfiles_created) <- names(calpuff_results_all)
 # scenario_prefix <- "ScA"   # Max 8 char  # included_stations = names(inpfiles_created)
 # included_stations <- names(inpfiles_created)[grep("oCC", names(inpfiles_created) )]
 
-# # --- Scenario B : old limits (2008), from flue gas rate
+# --- Three main scenarios : 
+# --- Scenario ScA : 
+# scenario_prefix <- "ScA"
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, SO2 upper limit']
+
+# --- Scenario B : only operating stations (filename_O)
 # scenario_prefix <- "ScB"
-# included_stations <- names(inpfiles_created)[grep("oFG", names(inpfiles_created) )]
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, SO2 lower limit']
 
-# --- Scenario C : new limits (2019), from flue gas rate
+# --- Scenario C : 
 scenario_prefix <- "ScC"
-included_stations <- names(inpfiles_created)[grep("nFG", names(inpfiles_created) )]
+included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2019 standards']
 
+# ---
 calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
 inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
 emissions_data %>% filter(emissions_data$emission_names %in% names(inpfiles_created)  == TRUE)  -> emissions_data_scenario
