@@ -9,16 +9,22 @@ library(readxl)
 # Parameters ###################################################################
 # ============================= Project specific ===============================
 # Reference scenario
-scenario_prefix_ref<- "ScAll"
+scenario_prefix_ref<- "ScA"
 
 # Select macro scenario
-# scenario_prefix <- "ScAll" ; scenario_description='Operating&Proposed' # All stations : operating and proposed
-scenario_prefix <- "ScB" ; scenario_description='Operating'          # Currently operating
+# scenario_prefix <- "ScA" ; scenario_description='CHANDRAPUR CFPPs, SO2 compliance, 85% PLF'            # emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization']
+# scenario_prefix <- "ScB" ; scenario_description='CHANDRAPUR CFPPs, SO2 compliance, actual (2020) PLF'  # emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020']
+# scenario_prefix <- "ScC" ; scenario_description='CHANDRAPUR CFPPs, SO2 actual, 85% PLF'                # emissions_data$emission_names[emissions_data$Scenario=='85% utilization']
+scenario_prefix <- "ScD" ; scenario_description='CHANDRAPUR CFPPs, SO2 actual, actual (2020) PLF'      # emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020']
 
-project_dir="H:/cambodia"       # calpuff_external_data-2 persistent disk (project data)
-# project_dir="G:/chile"        # calpuff_external_data persistent disk (project data)
-# project_dir="Z:/chile"        # network disk (project data)
+# project_dir="Z:/"             # network disk (project data)
+# project_dir="G:/chile"        # calpuff_external_data   persistent disk (project data)
+# project_dir="H:/cambodia"     # calpuff_external_data-2 persistent disk (project data)
+# project_dir="H:/indonesia"    # calpuff_external_data-2 persistent disk (project data)
+project_dir="I:/india"          # calpuff_external_data-3 persistent disk (project data)
+
 output_dir <- file.path(project_dir, "calpuff_suite") # Where to write all generated files
+# output_dir <- "F:/TAPM/Drax/" # Where to write all generated files
 emissions_dir <- file.path(project_dir, "emissions") # Directory where arbitrary-varying emission files are stored
 input_xls <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")) # Where plant positions are reported
 input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_ref,".xlsx")) # Where plant positions are reported
@@ -98,11 +104,11 @@ calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ] 
 
 #output plots and exposure results
 plot_results(calpuff_files,
-             scenario_names = paste0(scenario_description, ' CFPPs'),
+             scenario_names = paste0(scenario_description),  # , ' CFPPs'),
              dir=output_dir, 
              plants=plants,
              cities=cities,
-             # plot_km=c(400,800),
+             plot_km=c(800,800),
              colorkeybasis=TRUE,
              # plant_names='Drax',
              # plant_names=plants@data$Plants,

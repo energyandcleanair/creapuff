@@ -12,16 +12,15 @@ library(readxl)
 scenario_prefix_ref<- "ScA"
 
 # Select macro scenario
-# scenario_prefix <- "ScA" ; scenario_description='Jambi1-2, 2008 standards (upper limit)' 
-# scenario_prefix <- "ScB" ; scenario_description='Jambi1-2, 2008 standards (lower limit)'
-scenario_prefix <- "ScC" ; scenario_description='Jambi1-2, 2019 standards'
+# scenario_prefix <- "ScA" ; scenario_description='Jambi1 & Jambi2, 2008 standards (SO2 upper limit)'
+scenario_prefix <- "ScB" ; scenario_description='Jambi1 & Jambi2, 2008 standards'
+# scenario_prefix <- "ScC" ; scenario_description='Jambi1 & Jambi2, 2019 standards'
 
-# project_dir="H:/projects/cambodia"       # calpuff_external_data-2 persistent disk (project data)
-project_dir="H:/projects/indonesia"       # calpuff_external_data-2 persistent disk (project data)
-# project_dir="G:/projects/chile"        # calpuff_external_data persistent disk (project data)
-# project_dir="Z:/projects/chile"        # network disk (project data)
+project_dir="H:/indonesia"      # calpuff_external_data-2 persistent disk (project data)
+# project_dir="H:/cambodia"       # calpuff_external_data-2 persistent disk (project data)
+# project_dir="G:/chile"        # calpuff_external_data persistent disk (project data)
+# project_dir="Z:/chile"        # network disk (project data)
 output_dir <- file.path(project_dir, "calpuff_suite") # Where to write all generated files
-# output_dir <- "F:/TAPM/Drax/" # Where to write all generated files
 emissions_dir <- file.path(project_dir, "emissions") # Directory where arbitrary-varying emission files are stored
 input_xls <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")) # Where plant positions are reported
 input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_ref,".xlsx")) # Where plant positions are reported
