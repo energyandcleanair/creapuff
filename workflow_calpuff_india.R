@@ -8,6 +8,7 @@ library(lubridate)
 library(tidyverse)
 library(magrittr)
 library(pbapply)
+library(parallel)  
 
 
 # Parameters ###################################################################
@@ -15,27 +16,31 @@ library(pbapply)
 expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each direction: Use negative values to cro; use 0 to test
 
-# project_dir="F:/projects/cambodia_test" # calpuff_data persistent disk (calpuff config data)
 # project_dir="Z:/projects/"              # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
-# project_dir="Z:/projects/india"              # network disk (wrf_data).
-# project_dir="G:/projects/chile"         # calpuff_external_data persistent disk (project data)
-project_dir="G:/projects/india"         # calpuff_external_data persistent disk (project data)
+# project_dir="Z:/projects/india"         # network disk (wrf_data).
+
+# project_dir="F:/projects/cambodia_test" # calpuff_data            persistent disk (config  data)
+# project_dir="G:/projects/chile"         # calpuff_external_data   persistent disk (project data)
 # project_dir="H:/projects/cambodia"      # calpuff_external_data-2 persistent disk (project data)
+project_dir="I:/india"                    # calpuff_external_data-3 persistent disk (project data)
 
 output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
 # output_dir_CALMET <- file.path(output_dir, "CALMET") # Where to write all generated files
 # output_dir_CALPUFF <- file.path(output_dir, "CALPUFF") # Where to write all generated files
 # output_dir_POSTPRO <- file.path(output_dir, "POSTPRO") # Where to write all generated files
 
-wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored 
+# wrf_dir <- file.path(project_dir,"calwrf/d02") # Where calwrf data are stored
+wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored
 
 # emission_type = "varying" 
 emission_type = "constant"  # For Cambodia we dispose of constant emission data
 
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
-  input_xls <- file.path(emissions_dir,"india_coal_plants.xlsx") # File where constant-emission data are specified
-  # Emission file   # Plants	Capacity[MW] Lat[deg]	Long[deg]	Status	COD[year]	SO2_tpa[t/y]	NOx_tpa[t/y]	PM_tpa[t/y]	Hg_kgpa[kg/y]	Exit temperature[C]	Stack diameter[m]	Stack height[m]	Flue gas velocity[m/s] FGD[logical]
+  input_xls <- file.path(emissions_dir,"india_coal_plants_2020.xlsx") # File where constant-emission data are specified
+  # input_xls <- file.path(emissions_dir,"india_coal_plants_chandrapur_2020.xlsx") # File where constant-emission data are specified
+  # Emission file, required fields :
+  # Plants Lat[deg] Long[deg] Status* COD[year]* SO2_tpa[t/y] NOx_tpa[t/y] PM_tpa[t/y] Hg_kgpa[kg/y] Exit temperature[C] Stack diameter[m] Stack height[m]	FGD[logical]
 }
 if (emission_type == "varying") {
   emissions_dir <- file.path(project_dir,"emissions/2019") # Directory where arbitrary-varying emission files are stored
@@ -80,9 +85,8 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 #   calmet_exe = calmet_exe,
 #   calmet_templates = calmet_templates,
 #   only_make_additional_files=F,
-#   run_calmet = T
+#   run_calmet = F
 # )
-# 
 # browser()
 
 calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
@@ -167,7 +171,9 @@ if (emission_type == "varying") {
 }
 
 
-# browser()
+# To start from here
+save.image(file = file.path(output_dir, "save_data_1.RDS"))
+# load( file.path(output_dir, "save_data_1.RDS"))
 
 # ============================== Receptors =====================================
 # MESHDN parameter (in CALPUFF.INP) which defines the grid spacing 
@@ -218,25 +224,29 @@ bgconcs <- get_bg_concs(sources, mod_dir=bc_dir)
 o3dat <- NULL # Hourly ozone data file (NULL: no ozone monitoring stations)
 
 
+# To start from here
+# save.image(file = file.path(output_dir, "save_data_2.RDS"))
+# load( file.path(output_dir, "save_data_2.RDS"))
+
 # CALPUFF ######################################################################
 if (emission_type == "constant") {
   
   queue = unique(emissions_data$emission_names)
   for(run in queue) {
     emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- emissions_data_run$emission_names  
+    run_name <- run  # emissions_data_run$emission_names  
     print(paste0("CALPUFF run name: ", run_name))
     
     calpuff_result <- creapuff::runCalpuff(
       
-        emissions_data = emissions_data_run,               # For constant emission data
+        emissions_data = emissions_data_run,               # Only for constant emission data
         source_names = emissions_data_run$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
         FGD = emissions_data_run$FGD,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
         receptors = receptors,                             # Optional. If not set: full domain grid
         o3dat = o3dat,                                     # Optional. If not set: no surface data
-        species_configuration = "so2_nox_pm_hg",           # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
+        species_configuration = "so2_nox_pm_hg",           # With or without Hg  : "so2_nox_pm_hg", "so2_nox_pm"
         bgconcs = bgconcs,                                 # Optional. If not set: std values
-        # addparams = addparams,                           # Optional. If not set: std values
+        # addparams = addparams,                           # Optional. If not set: no other (single value) parameters to specify in the INP file
         run_name = run_name,   
         output_dir = output_dir,
         params_allgrids = calmet_result$params,
@@ -245,22 +255,41 @@ if (emission_type == "constant") {
         calpuff_template = calpuff_template,
     )
   }
-  # Execute each CALPUFF bat file
+
+  # CALPUFF execution
+  # Option 1 : execute each CALPUFF run, using different bat files 
   for(run in queue) {
     emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- emissions_data_run$emission_names  
+    run_name <- run  # emissions_data_run$emission_names  
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file)) 
+    # shell.exec(normalizePath(bat_file))
+    # Sys.sleep(2)
   } 
   
-  # All-in-one solution: only one CALPUFF simulation for all sources
+  # Option 2 : execute several CALPUFF runs using a same bat file (final number of bat files depends on available CPUs)
+  N_CPUs <- detectCores()
+  N_bat_files <- length(queue)
+  bat_file_lines <- round(N_bat_files/N_CPUs)  # CHECK : or ceiling() ?
+  for (i in seq(1, N_bat_files, by = bat_file_lines)){
+    i_end <- (i+bat_file_lines-1)
+    run <- queue[i:i_end] %>% subset(!is.na(.))
+    patterns=paste0(run, '_1', '.bat')
+    bat_files_list <- lapply(patterns, function(x){list.files(output_dir, pattern = x,  full.names=TRUE)})
+    bat_files_text <- sapply(bat_files_list, function(x){readLines(x,n=1)}) %>% append("pause")
+    bat_file <- file.path(output_dir, paste0("calpuff_batgroup_",i,"-",i_end,".bat"))
+    bat_files_text %>% writeLines(bat_file)
+    # shell.exec(normalizePath(bat_file))
+    # Sys.sleep(2)
+  }
+  
+  # Option 3 : only one CALPUFF simulation (one bat file only) for all sources together (one output file only) 
   # calpuff_result <- creapuff::runCalpuff(
-  # emissions_data = emissions_data,               # For constant emission data
+  # emissions_data = emissions_data,               # Only for constant emission data
   # source_names = emissions_data$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
   # FGD = emissions_data$FGD,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
   # receptors = receptors,                         # Optional. If not set: full domain grid
   # o3dat = o3dat,                                 # Optional. If not set: no surface data
-  # species_configuration = "so2_nox_pm_hg",       # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
+  # species_configuration = "so2_nox_pm_hg",       # With or without hg  : "so2_nox_pm_hr", "so2_nox_pm_hg"
   # bgconcs = bgconcs,                             # Optional. If not set: std values
   # # addparams = addparams,                       # Optional. If not set: std values
   # run_name = calmet_result$run_name,
@@ -275,20 +304,19 @@ if (emission_type == "varying") {
   queue = unique(emissions_data$emission_names)
   for(run in queue) {
     emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    # run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
-    run_name <- emissions_data_run$emission_names 
+    run_name <- run  # emissions_data_run$emission_names 
     NPT2 <- emissions_data_run$N_sources  # Number of emission sources per file
     print(paste0("CALPUFF run name: ", run_name, ", n_sources: ", NPT2))
     
     calpuff_result <- creapuff::runCalpuff(
-      # emissions_data = emissions_data,     # For constant emissions 
-      # source_names = source_names,         # Optional. If not set: read from emissions_data (if not present, set automatically)
-      # FGD = "T",                           # Optional. If not set: read from emissions_data (if not present, an error occurs)
-      receptors=receptors,                   # Optional. If not set: full domain grid
-      o3dat=o3dat,                           # Optional. If not set: no surface data
-      bgconcs=bgconcs,                       # Optional. If not set: std values
-      species_configuration = "so2_nox_pm_hg",  # Two possible values: "so2_nox_pm", "so2_nox_pm_hg"
-      addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
+      # emissions_data = emissions_data,        # Only for constant emissions 
+      # source_names = source_names,            # Optional. If not set: read from emissions_data (if not present, set automatically)
+      # FGD = "T",                              # Optional. If not set: read from emissions_data (if not present, an error occurs)
+      receptors=receptors,                      # Optional. If not set: full domain grid
+      o3dat=o3dat,                              # Optional. If not set: no surface data
+      bgconcs=bgconcs,                          # Optional. If not set: std values
+      species_configuration = "so2_nox_pm_hg",  # With or without hg: "so2_nox_pm_hr", "so2_nox_pm_hg"
+      addparams = list(NPTDAT = 1,              # Specify arbitrary-varying emission parameters
                        PTDAT = emissions_data_run$Path,
                        NPT2 = NPT2),
       run_name=run_name,
@@ -303,15 +331,20 @@ if (emission_type == "varying") {
   # Execute each CALPUFF bat file
   for(run in queue) {
     emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- emissions_data_run$emission_names
-
+    run_name <- run  # emissions_data_run$emission_names
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
     # shell.exec(normalizePath(bat_file)) 
+    # Sys.sleep(2)
   }
 }
 
 
 browser()
+
+
+# To start from here
+# save.image(file = file.path(output_dir, "save_data_3.RDS"))
+# load( file.path(output_dir, "save_data_3.RDS"))
 
 # POST-PROCESSING ##############################################################
 # ============================ All clusters together ============================
@@ -324,16 +357,35 @@ names(inpfiles_created) <- names(calpuff_results_all)
 
 # ========================== Scenario definition ===============================
 # --- Scenario ScAll : reference case (all stations)
-scenario_prefix <- "ScAll"   # Max 8 chars
-included_stations = names(inpfiles_created)
+# scenario_prefix <- "ScA"   # Max 8 chars  # included_stations = names(inpfiles_created)
+
+# --- Four main scenarios : 
+# --- Scenario ScA : reference case (all stations)
+# scenario_prefix <- "ScA"  # included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization']
 
 # --- Scenario B : only operating stations (filename_O)
 # scenario_prefix <- "ScB"
-# included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020']
 
 # --- Scenario C : 
 # scenario_prefix <- "ScC"
-# included_stations = c("")
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization']
+
+# --- Scenario D : 
+# scenario_prefix <- "ScD"
+# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020']
+
+ 
+# # --- Scenarios for 2019 : optional
+# # --- Scenario E : 
+# # scenario_prefix <- "ScE"
+# # included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2019']
+# 
+# # --- Scenario F : 
+# # scenario_prefix <- "ScF"
+# # included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2019']
+
 
 calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
 inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
