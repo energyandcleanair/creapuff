@@ -6,20 +6,39 @@ require(tidyverse)
 library(readxl)
 
 
+for (i_Sc in seq(1,16)) {
 # Parameters ###################################################################
 # ============================= Project specific ===============================
 # Reference scenario
-scenario_prefix_ref<- "ScA"
+scenario_prefix_ref<- "ScA_all"
 
-# Select macro scenario
-# scenario_prefix <- "ScA" ; scenario_description='Jambi1 & Jambi2, 2008 standards (SO2 upper limit)'
-scenario_prefix <- "ScB" ; scenario_description='Jambi1 & Jambi2, 2008 standards'
-# scenario_prefix <- "ScC" ; scenario_description='Jambi1 & Jambi2, 2019 standards'
+# Select macro scenarios
+if (i_Sc==1) {scenario_prefix <- "ScA_all" ; scenario_description='CHANDRAPUR CFPP, all units, SO2 compliance, 85% PLF'}
+if (i_Sc==2) {scenario_prefix <- "ScA_34"  ; scenario_description='CHANDRAPUR CFPP, units 3-4, SO2 compliance, 85% PLF'}          
+if (i_Sc==3) {scenario_prefix <- "ScA_567" ; scenario_description='CHANDRAPUR CFPP, units 5-6-7, SO2 compliance, 85% PLF'}            
+if (i_Sc==4) {scenario_prefix <- "ScA_89"  ; scenario_description='CHANDRAPUR CFPP, units 8-9, SO2 compliance, 85% PLF'}           
 
-project_dir="H:/indonesia"      # calpuff_external_data-2 persistent disk (project data)
-# project_dir="H:/cambodia"       # calpuff_external_data-2 persistent disk (project data)
-# project_dir="G:/chile"        # calpuff_external_data persistent disk (project data)
-# project_dir="Z:/chile"        # network disk (project data)
+if (i_Sc==5) {scenario_prefix <- "ScB_all" ; scenario_description='CHANDRAPUR CFPP, all units, SO2 compliance, actual PLF'}  
+if (i_Sc==6) {scenario_prefix <- "ScB_34"  ; scenario_description='CHANDRAPUR CFPP, units 3-4, SO2 compliance, actual PLF'}  
+if (i_Sc==7) {scenario_prefix <- "ScB_567" ; scenario_description='CHANDRAPUR CFPP, units 5-6-7, SO2 compliance, actual PLF'}  
+if (i_Sc==8) {scenario_prefix <- "ScB_89"  ; scenario_description='CHANDRAPUR CFPP, units 8-9, SO2 compliance, actual PLF'}  
+
+if (i_Sc==9 ){scenario_prefix <- "ScC_all" ; scenario_description='CHANDRAPUR CFPP, all units, actual SO2, 85% PLF'}                
+if (i_Sc==10){scenario_prefix <- "ScC_34"  ; scenario_description='CHANDRAPUR CFPP, units 3-4, actual SO2, 85% PLF'}                
+if (i_Sc==11){scenario_prefix <- "ScC_567" ; scenario_description='CHANDRAPUR CFPP, units 5-6-7, actual SO2, 85% PLF'}                
+if (i_Sc==12){scenario_prefix <- "ScC_89"  ; scenario_description='CHANDRAPUR CFPP, units 8-9, actual SO2, 85% PLF'}                
+
+if (i_Sc==13){scenario_prefix <- "ScD_all" ; scenario_description='CHANDRAPUR CFPP, all units, actual SO2, actual PLF'}     
+if (i_Sc==14){scenario_prefix <- "ScD_34"  ; scenario_description='CHANDRAPUR CFPP, units 3-4, actual SO2, actual PLF'}     
+if (i_Sc==15){scenario_prefix <- "ScD_567" ; scenario_description='CHANDRAPUR CFPP, units 5-6-7, actual SO2, actual PLF'}     
+if (i_Sc==16){scenario_prefix <- "ScD_89"  ; scenario_description='CHANDRAPUR CFPP, units 8-9, actual SO2, actual PLF'}     
+
+# project_dir="Z:/"             # network disk (project data)
+# project_dir="G:/chile"        # calpuff_external_data   persistent disk (project data)
+# project_dir="H:/cambodia"     # calpuff_external_data-2 persistent disk (project data)
+# project_dir="H:/indonesia"    # calpuff_external_data-2 persistent disk (project data)
+project_dir="I:/india"          # calpuff_external_data-3 persistent disk (project data)
+
 output_dir <- file.path(project_dir, "calpuff_suite") # Where to write all generated files
 emissions_dir <- file.path(project_dir, "emissions") # Directory where arbitrary-varying emission files are stored
 input_xls <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")) # Where plant positions are reported
@@ -113,6 +132,7 @@ plot_results(calpuff_files,
              outputs=c('png','expPop'),
 )
 
+}
 browser()
 
 #get WDPA protected areas

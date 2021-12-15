@@ -37,10 +37,10 @@ emission_type = "constant"  # For Cambodia we dispose of constant emission data
 
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
-  input_xls <- file.path(emissions_dir,"india_coal_plants_2020.xlsx") # File where constant-emission data are specified
-  # input_xls <- file.path(emissions_dir,"india_coal_plants_chandrapur_2020.xlsx") # File where constant-emission data are specified
+  # input_xls <- file.path(emissions_dir,"india_coal_plants_2020.xlsx") # File where constant-emission data are specified
+  input_xls <- file.path(emissions_dir,"india_coal_plants_chandrapur_2020.xlsx") # File where constant-emission data are specified
   # Emission file, required fields :
-  # Plants Lat[deg] Long[deg] Status* COD[year]* SO2_tpa[t/y] NOx_tpa[t/y] PM_tpa[t/y] Hg_kgpa[kg/y] Exit temperature[C] Stack diameter[m] Stack height[m]	FGD[logical]
+  # Plants, Lat[deg], Long[deg], Status*, COD[year]*, SO2_tpa[t/y], NOx_tpa[t/y], PM_tpa[t/y], Hg_kgpa[kg/y], Exit temperature[C], Stack diameter[m], Stack height[m], FGD[logical]
 }
 if (emission_type == "varying") {
   emissions_dir <- file.path(project_dir,"emissions/2019") # Directory where arbitrary-varying emission files are stored
@@ -172,7 +172,7 @@ if (emission_type == "varying") {
 
 
 # To start from here
-save.image(file = file.path(output_dir, "save_data_1.RDS"))
+# save.image(file = file.path(output_dir, "save_data_1.RDS"))
 # load( file.path(output_dir, "save_data_1.RDS"))
 
 # ============================== Receptors =====================================
@@ -192,7 +192,7 @@ for(run in queue) {
             nesting_factors=nesting_factors,
             files_met=out_files,
             target_crs=target_crs) -> receptors [[run]]
-    print(run)
+    print(run) 
 }
 
 # Select discrete receptors around sources
@@ -238,7 +238,6 @@ if (emission_type == "constant") {
     print(paste0("CALPUFF run name: ", run_name))
     
     calpuff_result <- creapuff::runCalpuff(
-      
         emissions_data = emissions_data_run,               # Only for constant emission data
         source_names = emissions_data_run$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
         FGD = emissions_data_run$FGD,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
@@ -314,8 +313,8 @@ if (emission_type == "varying") {
       # FGD = "T",                              # Optional. If not set: read from emissions_data (if not present, an error occurs)
       receptors=receptors,                      # Optional. If not set: full domain grid
       o3dat=o3dat,                              # Optional. If not set: no surface data
-      bgconcs=bgconcs,                          # Optional. If not set: std values
       species_configuration = "so2_nox_pm_hg",  # With or without hg: "so2_nox_pm_hr", "so2_nox_pm_hg"
+      bgconcs=bgconcs,                          # Optional. If not set: std values
       addparams = list(NPTDAT = 1,              # Specify arbitrary-varying emission parameters
                        PTDAT = emissions_data_run$Path,
                        NPT2 = NPT2),
@@ -346,8 +345,10 @@ browser()
 # save.image(file = file.path(output_dir, "save_data_3.RDS"))
 # load( file.path(output_dir, "save_data_3.RDS"))
 
+
+for (i_Sc in seq(1,16)) {
 # POST-PROCESSING ##############################################################
-# ============================ All clusters together ============================
+# ============================ By unit cluster  ================================
 # 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
 # Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
@@ -357,34 +358,35 @@ names(inpfiles_created) <- names(calpuff_results_all)
 
 # ========================== Scenario definition ===============================
 # --- Scenario ScAll : reference case (all stations)
-# scenario_prefix <- "ScA"   # Max 8 chars  # included_stations = names(inpfiles_created)
+# scenario_prefix <- "ScA"   # Max 8 chars  
+# included_stations <- names(inpfiles_created)
+# included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]
 
 # --- Four main scenarios : 
-# --- Scenario ScA : reference case (all stations)
-# scenario_prefix <- "ScA"  # included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization']
 
-# --- Scenario B : only operating stations (filename_O)
-# scenario_prefix <- "ScB"
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020']
+# --- Scenario ScA
+if (i_Sc==1) {scenario_prefix <- "ScA_all" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization']}
+if (i_Sc==2) {scenario_prefix <- "ScA_34"  ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization'][1:2]}
+if (i_Sc==3) {scenario_prefix <- "ScA_567" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization'][3:5]}
+if (i_Sc==4) {scenario_prefix <- "ScA_89"  ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, 85% utilization'][6:7]}
 
-# --- Scenario C : 
-# scenario_prefix <- "ScC"
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization']
+# --- Scenario B 
+if (i_Sc==5) {scenario_prefix <- "ScB_all" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020']} 
+if (i_Sc==6) {scenario_prefix <- "ScB_34"  ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020'][1:2]}  
+if (i_Sc==7) {scenario_prefix <- "ScB_567" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020'][3:5]}  
+if (i_Sc==8) {scenario_prefix <- "ScB_89"  ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2020'][6:7]}  
 
-# --- Scenario D : 
-# scenario_prefix <- "ScD"
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020']
+# --- Scenario C
+if (i_Sc==9) {scenario_prefix <- "ScC_all"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization']}
+if (i_Sc==10){scenario_prefix <- "ScC_34" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization'][1:2]}
+if (i_Sc==11){scenario_prefix <- "ScC_567"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization'][3:5]}
+if (i_Sc==12){scenario_prefix <- "ScC_89" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='85% utilization'][6:7]}
 
- 
-# # --- Scenarios for 2019 : optional
-# # --- Scenario E : 
-# # scenario_prefix <- "ScE"
-# # included_stations <- emissions_data$emission_names[emissions_data$Scenario=='SO2 compliance, actual utilization' & emissions_data$year =='2019']
-# 
-# # --- Scenario F : 
-# # scenario_prefix <- "ScF"
-# # included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2019']
+# --- Scenario D 
+if (i_Sc==13){scenario_prefix <- "ScD_all"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020']}
+if (i_Sc==14){scenario_prefix <- "ScD_34" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020'][1:2]}
+if (i_Sc==15){scenario_prefix <- "ScD_567"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020'][3:5]}
+if (i_Sc==16){scenario_prefix <- "ScD_89" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='actual utilization' & emissions_data$year =='2020'][6:7]}
 
 
 calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
@@ -416,8 +418,8 @@ creapuff::runPostprocessing(
   run_gridded_receptors=F,
   run_concentrations=T,
   run_deposition=T,
-  run_timeseries = T,
-  run_hourly = c('PM25', 'NO2', 'SO2'),
+  run_timeseries=T,
+  run_hourly=c('PM25', 'NO2', 'SO2'),
   run_pu=F,
   run_calpost=F,
   pu_templates = pu_templates,
@@ -511,6 +513,8 @@ if(exit_code != 0) stop("errors in POSTUTIL execution")
 system2(cp_bat) -> exit_code
 if(exit_code != 0) stop("errors in CALPOST execution")
 
+}
+
 
 browser()
 
@@ -524,8 +528,8 @@ names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfil
 names(inpfiles_created) <- names(calpuff_results_all)
 
 # Select stations
-included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]  # Only for operating stations
-# included_stations <- names(inpfiles_created)  # All stations
+# included_stations <- names(inpfiles_created)[grep("_O", names(inpfiles_created) )]  # Only for operating stations
+included_stations <- names(inpfiles_created)  # All stations
 
 calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
 inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
@@ -552,15 +556,15 @@ for(i in seq(1,length(calpuff_results_all))) {
     # METRUN=1,     # Set 1 in order to run CALPOST on all periods in file, for both PU and CP (good for tests).
     nper=NULL,      # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
     METRUN=0,       # Real cases : neither nper nor METRUN (PU uses all available periods, while CP one calendar year)
-    cp_period_function = get_cp_period,
-    pu_start_hour = NULL,
+    cp_period_function=get_cp_period,
+    pu_start_hour=NULL,
     cp_species=c('PM25', 'TPM10', 'SO2', 'NO2'), #c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
     run_discrete_receptors=T,
     run_gridded_receptors=F,
     run_concentrations=T,  # Run "repartition" and "total PM" (PU)
     run_deposition=T,      # Do NOT run "deposition" (PU) if there is NO mercury in emission file
-    run_timeseries = T,
-    run_hourly = c('PM25', 'NO2', 'SO2'),
+    run_timeseries=T,
+    run_hourly=c('PM25', 'NO2', 'SO2'),
     run_pu=T,
     run_calpost=T,
   )
