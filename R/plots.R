@@ -191,6 +191,16 @@ plot_results <- function(calpuff_files,
       
       lvls = unique(signif(c(k/10,seq(k/5,k,k/5)),1))
       
+      k_new <- k
+      if (conc_R@data@max < lvls[1]) print(paste0("Maximum physical value over the domain : ", conc_R@data@max)) 
+      while (conc_R@data@max < lvls[1]) {
+        print(paste0("(expPop) level 1 is too high, equal to ",lvls[1]))
+        k_new <- k_new - k_new/10
+        lvls_new = unique(signif(c(k_new/10,seq(k_new/5,k_new,k_new/5)),1))
+        lvls <- lvls_new
+        print(paste0("changed to ",lvls[1]))        
+      } 
+      
       if(!is.na(thr) & exceed) { #if a threshold has been specified, ensure it is included in levels
         lvls <- lvls[abs(lvls / thr - 1) > .1] #eliminate levels close to the threshold
         lvls <- sort(unique(c(lvls,thr)))
