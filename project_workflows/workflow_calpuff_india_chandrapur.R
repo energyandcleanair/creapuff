@@ -29,7 +29,7 @@ output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all genera
 wrf_dir <- file.path("I:/india","calwrf") 
 
 # emission_type = "varying" 
-emission_type = "constant"  # For Cambodia we dispose of constant emission data
+emission_type = "constant"  
 
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
@@ -57,14 +57,14 @@ template_dir="F:/templates"
 calmet_templates <- list(noobs=file.path(template_dir,"CALMET_template.INP"), 
                          surfobs=file.path(template_dir,"CALMET_surfObs_template.inp"))
 
-# calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template.INP")       # No mercury in emission file 
+# calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template.INP")   # No mercury in emission file 
 calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template_Hg.INP")  # Mercury (Hg) in emission file
 
 pu_templates <- list (# repartition = file.path(template_dir, "Mintia_postutilRepartition_noHg.inp"),  # No mercury in emission file 
-                      repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),     # Mercury (Hg) in emission file 
+                      repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),         # Mercury (Hg) in emission file 
                       deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
                       # total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))  # No mercury in emission file
-                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))     # Mercury (Hg) in emission file 
+                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))         # Mercury (Hg) in emission file 
 
 calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOutput_calpost.inp"), 
                           deposition = file.path(template_dir, "Mintia_depo_calpost.inp"))
@@ -172,11 +172,14 @@ if (emission_type == "varying") {
 # load( file.path(output_dir, "save_data_1.RDS"))
 
 # ============================== Receptors =====================================
-# MESHDN parameter (in CALPUFF.INP) which defines the grid spacing 
-# (DGRIDKM/MECHDN) of each disk, wrt the grid spacing of the outer 
-# meteo grid (DGRIDKM). Higher factor: higher density of receptors.
-nesting_factors = c(1,2,5,15)  # c(1,5,15) # c(1,2,5,15) 
+# Hi res config:
+nesting_factors = c(1,2,5,15)   # Grid spacing = mother grid resolution(DGRIDKM) / nesting_factors(MECHDN)
+nesfact_range = c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
+# Low res config
+# nesting_factors = c(1,5,15)
+# nesfact_range = c(125,25,5)
 
+# Define receptor grid 
 if(!exists('receptors')) receptors = list()
 queue = unique(emissions_data$emission_names)
 for(run in queue) {
@@ -190,9 +193,7 @@ for(run in queue) {
             target_crs=target_crs) -> receptors [[run]]
     print(run) 
 }
-
 # Select discrete receptors around sources
-nesfact_range = c(150,75,25,10) # c(125,25,5)  # c(125,25,10) # c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
 sources <- emissions_data %>% to_spdf %>% spTransform(target_crs)
 receptors %<>% select_receptors(sources=sources,
                                 run_name = calmet_result$run_name,
@@ -312,7 +313,9 @@ if (emission_type == "varying") {
       species_configuration = "so2_nox_pm_hg",  # With or without hg: "so2_nox_pm_hr", "so2_nox_pm_hg"
       bgconcs=bgconcs,                          # Optional. If not set: std values
       addparams = list(NPTDAT = 1,              # Specify arbitrary-varying emission parameters
-                       PTDAT = emissions_data_run$Path,
+                       PTDAT =
+                         
+                         emissions_data_run$Path,
                        NPT2 = NPT2),
       run_name=run_name,
       output_dir = output_dir,
