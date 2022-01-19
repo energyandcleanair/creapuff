@@ -20,7 +20,7 @@ runCalpuff <- function(
   source_names=NULL,
   FGD=NULL,
   species_configuration=NULL, # "so2_nox_pm" or "so2_nox_pm_hg"
-  emitted_polls = list(so2_nox_pm_hg=c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM','Hgp'),  # LC: add Hgp specie
+  emitted_polls = list(so2_nox_pm_hg=c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM'), 
                        so2_nox_pm=c('SO2','NO','NO2','PM15','PM10','PPM25'))[[species_configuration]],
   receptors=NULL,
   bgconcs = NULL,
@@ -115,18 +115,42 @@ runCalpuff <- function(
     
     if(!is.null(runsources$RGM)) 
       runsources@data %<>% mutate(HG0 = Hg_kgpa * hg_species$HG0[match(runsources$FGD, hg_species$FGD)],  # LC, mutate if "!is.null"
-                                  RGM = Hg_kgpa * hg_species$RGM[match(runsources$FGD, hg_species$FGD)],
-                                  Hgp = Hg_kgpa * hg_species$Hgp[match(runsources$FGD, hg_species$FGD)])
-    
+                                  RGM = Hg_kgpa * hg_species$RGM[match(runsources$FGD, hg_species$FGD)])  # 
+                                  # Hgp = Hg_kgpa * hg_species$Hgp[match(runsources$FGD, hg_species$FGD)])
+
     runsources$exit.temp %<>% (function(x) x+ifelse(x < 273, 273.15, 0))
     
     runsources@data %>% ungroup %>% 
       select(UTMx, UTMy, Stack.height, base.elevation..msl, diameter, velocity, exit.temp, downwash,
              all_of(emitted_polls)) -> runsources2
     
+    # Non-emitted species
+    runsources2  %<>% mutate(SO4=0) %<>% relocate (SO4, .after=SO2)
+    runsources2  %<>% mutate(HNO3=0) %<>% relocate (HNO3, .after=NO2)
+    runsources2  %<>% mutate(NO3=0) %<>% relocate (NO3, .after=HNO3)
+    
     runsources2 %>% 
       mutate_all(signif, 6) %>% mutate_all(format, nsmall=1) %>% 
       apply(1, paste, collapse=", ") -> emislines
+    
+    print("__________ Plant specifications ___________")
+    print(runsources2[1:8])
+    print("______________ Emission rates _____________")
+    print(runsources2[9:19])
+    print("")
+    
+    # Modeled species (11 species)
+    # SO2  : 
+    # SO4  : not emitted -> 0
+    # NO   : 
+    # NO2  :
+    # HNO3 : not emitted -> 0
+    # NO3  : not emitted -> 0
+    # PM15 : 
+    # PM10 : 
+    # PPM25: 
+    # Hg0  : gas-phase elemental mercury
+    # RGM  : inorganic reactive gaseous mercury (particulate mercury, Hgp, is not considered)
     
     #  Source       X         Y       Stack    Base     Stack    Exit  Exit    Bldg.  Emission
     #No.     Coordinate Coordinate Height Elevation Diameter  Vel.  Temp.   Dwash   Rates
