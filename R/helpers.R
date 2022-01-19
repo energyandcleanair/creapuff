@@ -301,7 +301,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   calpuff_files[grep("tflx",calpuff_files$name),"unit"] <- "kg/ha/yr"
   
   calpuff_files[calpuff_files$species == 'hg','scale'] %<>% multiply_by(1e6 * hg_scaling)
-  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in t in CALPUFF.'))
+  message(paste0('mercury scaling: ', hg_scaling, '. Enter 1e-3 if you input Hg in kg/y (instead of t/y) in CALPUFF.'))
   calpuff_files[calpuff_files$species == 'hg','unit'] <- "mg/ha/yr"
   
   calpuff_files$hr <- as.numeric(gsub("[_hr]","",calpuff_files$hr))
@@ -348,7 +348,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==24,"threshold"]                 <- 40  # WHO-2021
   calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 # Great lakes study
   calpuff_files$threshold.plotunit <- calpuff_files$threshold * calpuff_files$plotscale
-  print("WHO-2021 standards")
+  print("WHO-2021 AQ guidelines")
 
   # Indonesian standards
   # calpuff_files$threshold <- NA
@@ -363,7 +363,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   # calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"]    <- 55
   # calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr > 7000,"threshold"] <- 15
   # calpuff_files$threshold.plotunit <- calpuff_files$threshold * calpuff_files$plotscale
-  # print("Indonesian standards")
+  # print("Indonesian AQ guidelines")
   
   # Old WHO standards
   # calpuff_files$threshold <- NA
@@ -374,7 +374,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   # calpuff_files[calpuff_files$speciesName=="mercury" & calpuff_files$type=="deposition","threshold"] <- 125 # Great lakes study
   # calpuff_files[calpuff_files$speciesName=="SO2" & calpuff_files$hr==1,"threshold"]                  <- 75/0.355 # U.S. NAAQS  at 1atm, 0°C 
   # calpuff_files$threshold.plotunit <- calpuff_files$threshold * calpuff_files$plotscale
-  # print("Old WHO standards")
+  # print("Old WHO AQ guidelines")
   
   return(calpuff_files)
 }
