@@ -34,7 +34,7 @@ emission_type = "constant"  # For Cambodia we dispose of constant emission data
 
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
-  input_xls <- file.path(emissions_dir,"Jambi_coal_plants.xlsx") # File where constant-emission data are specified
+  input_xls <- file.path(emissions_dir,"Jambi1_coal_plants_2.xlsx") # File where constant-emission data are specified
   # Emission file   # Plants	Capacity[MW] Lat[deg]	Long[deg]	Status	COD[year]	SO2_tpa[t/y]	NOx_tpa[t/y]	PM_tpa[t/y]	Hg_kgpa[kg/y]	Exit temperature[C]	Stack diameter[m]	Stack height[m]	Flue gas velocity[m/s] FGD[logical]
 }
 if (emission_type == "varying") {
@@ -82,7 +82,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 #   calmet_exe = calmet_exe,
 #   calmet_templates = calmet_templates,
 #   only_make_additional_files=F,
-#   run_calmet = T
+#   run_calmet = F
 # )
 
 # browser()
@@ -112,7 +112,7 @@ if (emission_type == "constant") {
   # read_xlsx(input_xls, sheet='CALPUFF input') -> emissions_data
   read_xlsx(input_xls, sheet='CALPUFF input') -> emissions_data
   
-  # Define which sources should be included in which scenario. COD = commercial operation date  # LC, CHECK
+  # Filter Data. For example by COD = commercial operation date  
   # emissions_data$COD %>% substr(.,nchar(.)-3,nchar(.)) %>% as.numeric () <   
   #   calmet_result$start_dates[[1]] %>% format("%Y") %>% as.numeric() ->  
   #   emissions_data$existing
@@ -176,7 +176,7 @@ if (emission_type == "varying") {
 # MESHDN parameter (in CALPUFF.INP) which defines the grid spacing 
 # (DGRIDKM/MECHDN) of each disk, wrt the grid spacing of the outer 
 # meteo grid (DGRIDKM). Higher factor: higher density of receptors.
-nesting_factors = c(1,2,5,15)  # c(1,5,15) # c(1,2,5,15) 
+nesting_factors = c(1,5,15) # c(1,2,5,15)  # c(1,5,15) # c(1,2,5,15) 
 
 if(!exists('receptors')) receptors = list()
 queue = unique(emissions_data$emission_names)
@@ -193,7 +193,7 @@ for(run in queue) {
 }
 
 # Select discrete receptors around sources
-nesfact_range = c(150,75,25,10) # c(125,25,5)  # c(125,25,10) # c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
+nesfact_range = c(125,25,5) # c(150,75,25,10) # c(125,25,5)  # c(125,25,10) # c(150,75,25,10) # Radius of receptor disks [km], from outer to inner disk
 sources <- emissions_data %>% to_spdf %>% spTransform(target_crs)
 receptors %<>% select_receptors(sources=sources,
                                 run_name = calmet_result$run_name,
@@ -254,7 +254,7 @@ if (emission_type == "constant") {
     run_name <- emissions_data_run$emission_names  
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
     shell.exec(normalizePath(bat_file))
-    Sys.sleep(2)
+    Sys.sleep(10)
   } 
   
   # All-in-one solution: only one CALPUFF simulation for all sources
@@ -311,12 +311,14 @@ if (emission_type == "varying") {
 
     bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
     # shell.exec(normalizePath(bat_file))
+    # Sys.sleep(10)
   }
 }
 
 
 browser()
 
+for (i_Sc in seq(1,2)) {
 # POST-PROCESSING ##############################################################
 # ============================ All clusters together ============================
 # 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
@@ -331,18 +333,11 @@ names(inpfiles_created) <- names(calpuff_results_all)
 # scenario_prefix <- "ScA"   # Max 8 char  # included_stations = names(inpfiles_created)
 # included_stations <- names(inpfiles_created)[grep("oCC", names(inpfiles_created) )]
 
-# --- Three main scenarios : 
-# --- Scenario ScA : 
-# scenario_prefix <- "ScA"
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, SO2 upper limit']
-
-# --- Scenario B : only operating stations (filename_O)
-# scenario_prefix <- "ScB"
-# included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, SO2 lower limit']
-
-# --- Scenario C : 
-scenario_prefix <- "ScC"
-included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2019 standards']
+# --- Two main scenarios : 
+if (i_Sc==1) {scenario_prefix <- "ScA"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, FGD']}
+if (i_Sc==2) {scenario_prefix <- "ScB"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2019 standards, FGD']}
+# if (i_Sc==3) {scenario_prefix <- "ScS" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, FGD, 130 degrees']}
+# if (i_Sc==4) {scenario_prefix <- "ScW"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, no FGD']}
 
 # ---
 calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
@@ -468,4 +463,6 @@ system2(pu_bat) -> exit_code
 if(exit_code != 0) stop("errors in POSTUTIL execution")
 system2(cp_bat) -> exit_code
 if(exit_code != 0) stop("errors in CALPOST execution")
+
+}
 
