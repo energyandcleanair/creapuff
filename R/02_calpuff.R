@@ -19,6 +19,7 @@ runCalpuff <- function(
   emissions_data=NULL, #data.frame with emissions data for all sources
   source_names=NULL,
   FGD=NULL,
+  AQCS=NULL,
   species_configuration=NULL, # "so2_nox_pm" or "so2_nox_pm_hg"
   emitted_polls = list(so2_nox_pm_hg=c('SO2','NO','NO2','PM15','PM10','PPM25','HG0','RGM'), 
                        so2_nox_pm=c('SO2','NO','NO2','PM15','PM10','PPM25'))[[species_configuration]],
@@ -62,13 +63,21 @@ runCalpuff <- function(
   calpuff_dir <- dirname(calpuff_exe)
   
   if(!is.null(emissions_data)) {
-    # Default Hg speciation in %. FGD : flue gas desulfurization (FGD) systems
-    "FGD  HG0 RGM Hgp
-  F 43.9  54  2.1
-  T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
-      mutate_if(is.numeric, divide_by, 100) ->
-      hg_species
     
+  # Lauri. Speciation data from Lee et al. (2006).  
+  #   "FGD  HG0 RGM Hgp
+  # F 43.9  54  2.1
+  # T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
+  #     mutate_if(is.numeric, divide_by, 100) ->
+  #     hg_species
+  
+  # LC. Speciation data from Zhang et al. (2016), "Mercury transformation and speciation in flue gas... "
+   speciation_matrix <- data.frame(AQCS=c("ESP+wFGD","ESP","FF","none","CFBC"),
+                                   FGD=c(T,F,F,F,F),
+                                   HG0=c(84,58,50,56,72),
+                                   RGM=c(16,41,49,34,27),
+                                   Hgp=c(0.6,1.3,0.5,10,0.6)) %>%  mutate_if(is.numeric, divide_by, 100)
+
     #rename columns to use default variable names
     emissions_data %<>% rename(Stack.height=contains("Stack height"), 
                         velocity=contains("velocity"),
@@ -93,9 +102,12 @@ runCalpuff <- function(
         runsources$source_names <- source_names
       }
     
-    ifelse (!is.null(FGD), FGD, ifelse(!is.null(runsources$FGD), runsources$FGD, stop("error : no information on FGD of emission sources"))
+    ifelse (!is.null(FGD), FGD, ifelse(!is.null(runsources$FGD), runsources$FGD, stop("error : no information on FGD of emission sources (TRUE / FALSE)"))
             ) %>% as.logical() -> runsources$FGD # LC : priority to external parameters 
 
+    ifelse (!is.null(AQCS), AQCS, ifelse(!is.null(runsources$AQCS), runsources$AQCS, stop("error : no information on AQCS of emission sources (ESP+wFGD / ESP / FF / none / CFBC)"))
+    ) -> runsources$AQCS # LC : priority to external parameters
+    
     if(is.null(runsources$base.elevation..msl))
       runsources$base.elevation..msl <- get_plant_elev(runsources,
                                                        dir=output_dir,
@@ -107,17 +119,18 @@ runCalpuff <- function(
     if(!is.null(runsources$SO2)) runsources@data %<>% mutate(SO2 = SO2_tpa)  # LC, mutate if "!is.null"
     
     if(!is.null(runsources$NO)) runsources@data %<>% mutate(NO  = NOx_tpa * .95 * 30/46,  # LC, mutate if "!is.null"
-                                                           NO2 = NOx_tpa * .05)
+                                                            NO2 = NOx_tpa * .05)
     
     if(!is.null(runsources$PPM25)) runsources@data %<>% mutate(PM15 = PM_tpa * 26/80,  # LC, mutate if "!is.null"
-                                                              PM10 = PM_tpa * 30/80,
+                                                               PM10 = PM_tpa * 30/80,
                                                               PPM25 = PM_tpa * 24/80)
+    if(!is.null(runsources$RGM)){
+        if(runsources$FGD==T) runsources$AQCS = "ESP+wFGD" # If FGD is TRUE we use the standard values for ESP+wFGD. For the moment, no data for other AQCS types. 
+        runsources@data %<>% mutate(HG0 = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(HG0),
+                                    RGM = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(RGM),
+                                    Hgp = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(Hgp))
+    }
     
-    if(!is.null(runsources$RGM)) 
-      runsources@data %<>% mutate(HG0 = Hg_kgpa * hg_species$HG0[match(runsources$FGD, hg_species$FGD)],  # LC, mutate if "!is.null"
-                                  RGM = Hg_kgpa * hg_species$RGM[match(runsources$FGD, hg_species$FGD)])  # 
-                                  # Hgp = Hg_kgpa * hg_species$Hgp[match(runsources$FGD, hg_species$FGD)])
-
     runsources$exit.temp %<>% (function(x) x+ifelse(x < 273, 273.15, 0))
     
     runsources@data %>% ungroup %>% 
