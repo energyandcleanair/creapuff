@@ -34,7 +34,7 @@ emission_type = "constant"  # For Cambodia we dispose of constant emission data
 if (emission_type == "constant"){
   emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-varying emission files are stored
   # input_xls <- file.path(emissions_dir,"india_coal_plants_2020.xlsx") # File where constant-emission data are specified
-  input_xls <- file.path(emissions_dir,"india_coal_plants_kaparkheda_2020.xlsx") # File where constant-emission data are specified
+  input_xls <- file.path(emissions_dir,"india_coal_plants_kaparkheda_2020_stack_height_corrected+exit_T_corrected.xlsx") # File where constant-emission data are specified
   # Emission file, required fields :
   # Plants, Lat[deg], Long[deg], Status*, COD[year]*, SO2_tpa[t/y], NOx_tpa[t/y], PM_tpa[t/y], Hg_kgpa[kg/y], Exit temperature[C], Stack diameter[m], Stack height[m], FGD[logical]
 }
@@ -71,18 +71,18 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 
 
 # CALMET #######################################################################
-# calmet_result <- creapuff::runCalmet(
-#   input_xls = input_xls,
-#   wrf_dir = wrf_dir,
-#   expand_grids = expand_grids,
-#   expand_ncells = expand_ncells,
-#   output_dir = output_dir,
-#   gis_dir = gis_dir,
-#   calmet_exe = calmet_exe,
-#   calmet_templates = calmet_templates,
-#   only_make_additional_files=F,
-#   run_calmet = F
-# )
+calmet_result <- creapuff::runCalmet(
+  input_xls = input_xls,
+  wrf_dir = wrf_dir,
+  expand_grids = expand_grids,
+  expand_ncells = expand_ncells,
+  output_dir = output_dir,
+  gis_dir = gis_dir,
+  calmet_exe = calmet_exe,
+  calmet_templates = calmet_templates,
+  only_make_additional_files=F,
+  run_calmet = F
+)
 # browser()
 
 calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))

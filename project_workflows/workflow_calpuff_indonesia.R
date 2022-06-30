@@ -22,12 +22,9 @@ expand_ncells = -5  # Number of cells to expand met grid (e.g., WRF) in each dir
 # project_dir="H:/cambodia"      # calpuff_external_data-2 persistent disk (project data)
 project_dir="H:/indonesia"       # calpuff_external_data-2 persistent disk (project data)
 
-output_dir <- file.path(project_dir,"calpuff_suite") # Where to write all generated files
-# output_dir_CALMET <- file.path(output_dir, "CALMET") # Where to write all generated files
-# output_dir_CALPUFF <- file.path(output_dir, "CALPUFF") # Where to write all generated files
-# output_dir_POSTPRO <- file.path(output_dir, "POSTPRO") # Where to write all generated files
-
 wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored 
+
+output_dir <- file.path(project_dir,"calpuff_suite") ; if (!dir.exists(output_dir)) dir.create(output_dir) # Where to write all generated files
 
 # emission_type = "varying" 
 emission_type = "constant"  # For Cambodia we dispose of constant emission data
