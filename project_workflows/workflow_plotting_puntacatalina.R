@@ -3,51 +3,28 @@
 # devtools::reload(pkgload::inst("creapuff"))
 library(creapuff) 
 require(tidyverse)
-library(magrittr)
 library(readxl)
 
 
-for (i_Sc in seq(1,16)) {
+for (i_Sc in seq(1,4)) {
 # Parameters ###################################################################
 # ============================= Project specific ===============================
 # Reference scenario
-scenario_prefix_ref<- "ScA_all"
+scenario_prefix_ref<- "ScA"
 
 # Select macro scenarios
-if (i_Sc==1) {scenario_prefix <- "ScA_all" ; scenario_description='Kaparkheda CFPP, all units, SO2 compliance, 85% PLF'}
-if (i_Sc==2) {scenario_prefix <- "ScA_12"  ; scenario_description='Kaparkheda CFPP, units 1-2, SO2 compliance, 85% PLF'}          
-if (i_Sc==3) {scenario_prefix <- "ScA_34" ; scenario_description='Kaparkheda CFPP, units 3-4, SO2 compliance, 85% PLF'}            
-if (i_Sc==4) {scenario_prefix <- "ScA_5"  ; scenario_description='Kaparkheda CFPP, unit 5, SO2 compliance, 85% PLF'}           
+if (i_Sc==1) {scenario_prefix <- "ScA"; scenario_description='CTPC for 2021. Declared emissions'}
+if (i_Sc==2) {scenario_prefix <- "ScB"; scenario_description='CTPC for 2021. Real emissions, best scenario'}
+if (i_Sc==3) {scenario_prefix <- "ScC"; scenario_description='CTPC for 2021. Real emissions, worst scenario'}
+if (i_Sc==4) {scenario_prefix <- "ScD"; scenario_description='CTPC for 2021. Real emissions, mean scenario'}  
 
-if (i_Sc==5) {scenario_prefix <- "ScB_all" ; scenario_description='Kaparkheda CFPP, all units, SO2 compliance, actual PLF'}  
-if (i_Sc==6) {scenario_prefix <- "ScB_12"  ; scenario_description='Kaparkheda CFPP, units 1-2, SO2 compliance, actual PLF'}  
-if (i_Sc==7) {scenario_prefix <- "ScB_34" ; scenario_description='Kaparkheda CFPP, units 3-4, SO2 compliance, actual PLF'}  
-if (i_Sc==8) {scenario_prefix <- "ScB_5"  ; scenario_description='Kaparkheda CFPP, unit 5, SO2 compliance, actual PLF'}  
-
-if (i_Sc==9 ){scenario_prefix <- "ScC_all" ; scenario_description='Kaparkheda CFPP, all units, actual SO2, 85% PLF'}                
-if (i_Sc==10){scenario_prefix <- "ScC_12"  ; scenario_description='Kaparkheda CFPP, units 1-2, actual SO2, 85% PLF'}                
-if (i_Sc==11){scenario_prefix <- "ScC_34" ; scenario_description='Kaparkheda CFPP, units 3-4, actual SO2, 85% PLF'}                
-if (i_Sc==12){scenario_prefix <- "ScC_5"  ; scenario_description='Kaparkheda CFPP, unit 5, actual SO2, 85% PLF'}                
-
-if (i_Sc==13){scenario_prefix <- "ScD_all" ; scenario_description='Kaparkheda CFPP, all units, actual SO2, actual PLF'}     
-if (i_Sc==14){scenario_prefix <- "ScD_12"  ; scenario_description='Kaparkheda CFPP, units 1-2, actual SO2, actual PLF'}     
-if (i_Sc==15){scenario_prefix <- "ScD_34" ; scenario_description='Kaparkheda CFPP, units 3-4, actual SO2, actual PLF'}     
-if (i_Sc==16){scenario_prefix <- "ScD_5"  ; scenario_description='Kaparkheda CFPP, unit 5, actual SO2, actual PLF'}     
-
-# project_dir="Z:/"             # network disk (project data)
-# project_dir="G:/chile"        # calpuff_external_data   persistent disk (project data)
-# project_dir="H:/cambodia"     # calpuff_external_data-2 persistent disk (project data)
-# project_dir="H:/indonesia"    # calpuff_external_data-2 persistent disk (project data)
-project_dir="I:/india_kaparkheda"          # calpuff_external_data-3 persistent disk (project data)
+# project_dir="Z:/"                # network disk (project data)
+project_dir="H:/puntacatalina"     # calpuff_external_data-3 persistent disk (project data)
 
 output_dir <- file.path(project_dir, "calpuff_suite") # Where to write all generated files
 emissions_dir <- file.path(project_dir, "emissions") # Directory where arbitrary-varying emission files are stored
 input_xls <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")) # Where plant positions are reported
 input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_ref,".xlsx")) # Where plant positions are reported
-
-png_dir <- file.path(project_dir,"png") ; if (!dir.exists(png_dir)) dir.create(png_dir)
-exceedances_dir <- file.path(project_dir,"exceedances") ; if (!dir.exists(exceedances_dir)) dir.create(exceedances_dir)
-tseries_dir <- file.path(project_dir,"tseries") ; if (!dir.exists(tseries_dir)) dir.create(tseries_dir)
 
 # ================================ General =====================================
 gis_dir <- "F:/gis"                         # The folder where we store general GIS data
@@ -65,13 +42,14 @@ calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
 UTMZ <- calmet_result$params[[01]]$IUTMZN
 UTMH <- calmet_result$params[[01]]$UTMHEM
 
-# List generated tif files
+# List generated cvs files
 calpuff_files <- get_calpuff_files(ext=paste0(tolower(scenario_prefix),".csv"), gasunit = 'ug', dir=output_dir, hg_scaling=1e-3)
 grids = get_grids_calpuff(calpuff_files, UTMZ, UTMH, map_res=1)
 
 # Select data and make tif
 # calpuff_files %>% filter(period=='annual' | !is.na(threshold)) %>% make_tifs(grids = grids)  # Original filtering
 # calpuff_files %<>% slice(grep(tolower(scenario_prefix), calpuff_files$name)) %>% make_tifs(grids = grids)
+# calpuff_files %>% filter(!is.na(threshold))  %>% make_tifs(grids = grids)
 calpuff_files %>% make_tifs(grids = grids)
 
 # Select tif data 
@@ -102,28 +80,28 @@ zipping_function=function(zipfile, files_to_zip) {
   return(return_value)
 }
 
-plotting_square_length_in_km <- 1200
+plotting_square_length_in_km <- 1400
 plot_bb <- plants %>% extent %>% magrittr::add(plotting_square_length_in_km)
 cities <- get_cities(plot_bb, grids)
 # cities$pos[cities$name == 'Kingston upon Hull'] <- 4
 
-# I set max values, to use them, put colorkeybasis=TRUE
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm" ]    = 0.15  # fly ash, [kg/ha/yr], deposition
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="hg" ]    = 150   # mercury, [mg/ha/yr], deposition
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2eq" ] = 15    # acid,    [kg/ha/yr SO2-equivalent], deposition
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ]   = 0.25  # [ug/m3], concentrations
+# I set max values, to use them, put colorkeybasis=TRUE instead of NULL
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm" ]    = 0.45  # fly ash, [kg/ha/yr], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="hg" ]    = 30    # mercury, [mg/ha/yr], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2eq" ] = 4.5    # acid,    [kg/ha/yr SO2-equivalent], deposition
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="no2" ]   = 0.35  # [ug/m3], concentrations
 calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="pm25" ]  = 0.5   # [ug/m3]
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="tpm10" ] = 1.1   # [ug/m3]
-calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ]   = 0.25  # [ug/m3]
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="tpm10" ] = 0.5   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="annual" & calpuff_files$species=="so2" ]   = 1.6  # [ug/m3]
 
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ]   = 1.7   # [ug/m3]
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="pm25" ]  = 9     # [ug/m3]
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="tpm10" ] = 9    # [ug/m3]
-calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ]   = 12    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="no2" ]   = 4.0   # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="pm25" ]  = 6    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="tpm10" ] = 6    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="daily"  & calpuff_files$species=="so2" ]   = 20    # [ug/m3]
 
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ]   = 11    # [ug/m3]
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="pm25" ]  = 45    # [ug/m3]
-calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ]   = 55    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="no2" ]   = 20    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="pm25" ]  = 30    # [ug/m3]
+calpuff_files$k[calpuff_files$period=="hourly" & calpuff_files$species=="so2" ]   = 100    # [ug/m3]
 
 #output plots and exposure results
 plot_results(calpuff_files,
@@ -131,13 +109,15 @@ plot_results(calpuff_files,
              dir=output_dir, 
              plants=plants,
              cities=cities,
-             plot_km=c(plotting_square_length_in_km,plotting_square_length_in_km),
-             colorkeybasis=TRUE,
-             # plant_names='Drax',
+             plot_km=c(plotting_square_length_in_km,plotting_square_length_in_km/2),
+             colorkeybasis=TRUE,  # NULL,
+             plant_names='Punta Catalina',
              # plant_names=plants@data$Plants,
              zipping_function=zipping_function,
              filename_suffix=paste0("_",scenario_prefix),
-             outputs=c('png','expPop'),
+             # outputs=c('png','expPop'),
+             outputs=c("png", "kml", "expPop", "cityconcs"),
+             
 )
 
 }
@@ -147,14 +127,26 @@ plot_results(calpuff_files,
 # ... Moving ...
 print('... moving output files (png, exceedances, tseries,...)')
 # PNG files
+png_dir <- file.path(project_dir,"png")
+if (!dir.exists(png_dir)) dir.create(png_dir)
 file.path(output_dir,list.files(output_dir,"\\.png$" )) -> png_files
 file.copy(png_files,png_dir, overwrite = TRUE)
 file.remove(png_files)
+# KML files
+kmz_dir <- file.path(project_dir,"kmz") ; 
+if (!dir.exists(kmz_dir)) dir.create(kmz_dir)
+file.path(output_dir,list.files(output_dir,"\\.kmz$" )) -> kmz_files
+file.copy(kmz_files,kmz_dir, overwrite = TRUE)
+file.remove(kmz_files)
 # Exeedances
+exceedances_dir <- file.path(project_dir,"exceedances")
+if (!dir.exists(exceedances_dir)) dir.create(exceedances_dir)
 file.path(output_dir,list.files(output_dir,"expPop|threshold_exceedances" )) -> exceedances_files
 file.copy(exceedances_files,exceedances_dir, overwrite = TRUE)
 file.remove(exceedances_files)
 # tseries
+tseries_dir <- file.path(project_dir,"tseries")
+if (!dir.exists(tseries_dir)) dir.create(tseries_dir)
 file.path(output_dir,list.files(output_dir,"tseries" )) -> tseries_files
 file.copy(tseries_files,tseries_dir, overwrite = TRUE)
 file.remove(tseries_files)

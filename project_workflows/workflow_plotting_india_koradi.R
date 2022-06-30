@@ -43,7 +43,7 @@ input_xls_ref <- file.path(emissions_dir, paste0("coordinates_",scenario_prefix_
 
 png_dir <- file.path(project_dir,"png") ; if (!dir.exists(png_dir)) dir.create(png_dir)
 exceedances_dir <- file.path(project_dir,"exceedances") ; if (!dir.exists(exceedances_dir)) dir.create(exceedances_dir)
-tseries_dir <- file.path(project_dir,"tserires") ; if (!dir.exists(tseries_dir)) dir.create(tseries_dir)
+tseries_dir <- file.path(project_dir,"tseries") ; if (!dir.exists(tseries_dir)) dir.create(tseries_dir)
 
 # ================================ General =====================================
 gis_dir <- "F:/gis"                         # The folder where we store general GIS data
