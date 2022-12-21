@@ -269,6 +269,39 @@ get_wdpa_areas <- function(grids){
     creahelpers::get_wdpa()
 }
 
+#' Add columns if missing from input dataframe
+#'
+#' @param ext
+#' @param df input data.frame
+#' @param columns character vector, columns to add
+#' @param default_value
+#'
+#' @return
+#' @export
+#'
+#' @examples
+add_missing_columns <- function(df, columns, default_value=0) {
+  columns_to_add <- columns[!(columns %in% names(df))]
+  
+  for(newcol in columns_to_add) df[[newcol]] <- default_value
+  
+  df
+}
+
+#' Make source names valid for CALPUFF
+#'
+#' @param ext
+#' @param x character vector; names of sources to shorten and make unique
+#'
+#' @return
+#' @export
+#'
+#' @examples
+make_srcnam <- function(x) {
+  digits_needed = x %>% length %>% add(1) %>% log(10) %>% ceiling
+  max_name_length = 8-digits_needed
+  x %>% stringi::stri_trans_general("Latin-ASCII") %>% substr(1,7) %>% make.names %>% make.unique(sep='')
+}
 
 
 #' Build concentration (additional) dataset from CALPUF results
