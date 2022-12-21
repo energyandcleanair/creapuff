@@ -141,8 +141,8 @@ runCalpuff <- function(
           }) %>% unlist %>% unname -> 
           addsubgroups$X19b
         
-        addparams$NSPT1 = length(monthscalingsubgroups$X13d)
-        addparams$NSFTAB = length(monthscalingsubgroups$X19b)/4
+        addparams$NSPT1 = length(addsubgroups$X13d)
+        addparams$NSFTAB = length(addsubgroups$X19b)/4
       }
     }
     
