@@ -405,6 +405,13 @@ calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_
 names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
 names(inpfiles_created) <- names(calpuff_results_all)
 
+get_cp_period <- function(params) {
+  runyr = as.numeric(params$val[params$name=='ISYR']) + ifelse(params$val[params$name=='ISMO']==12, 1, 0)
+  list(start = paste0(runyr, '-01-01 0') %>% ymd_h,
+       end = paste0(runyr+1, '-01-01 0') %>% ymd_h)
+}
+
+
 run_from_session=F
 for (plant in c(plants, 'koreasteel')) {
   # POST-PROCESSING ##############################################################
