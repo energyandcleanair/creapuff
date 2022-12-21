@@ -18,6 +18,7 @@ runCalpuff <- function(
   params_allgrids,
   emissions_data=NULL, #data.frame with emissions data for all sources
   source_names=NULL,
+  area_sources=NULL,
   FGD=NULL,
   AQCS=NULL,
   species_configuration=NULL, # "so2_nox_pm" or "so2_nox_pm_hg"
@@ -26,15 +27,19 @@ runCalpuff <- function(
   receptors=NULL,
   bgconcs = NULL,
   o3dat = NULL,
+  monthly_scaling = NULL, #data frame with colums apply_to, pollutant, monthscaling; apply to can include emission_names in emissions_data or "all" for all sources; pollutants are SO2, NOx, PM, Hg; monthsscaling is a comma-separated string of 12 scaling factors
   addparams = list(),
-  addsubgroups = NULL,
+  addsubgroups = list(),
   output_dir=unique(dirname(params_allgrids$METDAT)),
   gis_dir=get_gis_dir(),
   calpuff_exe='C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe',
   only_make_additional_files=F,
   calpuff_template = list(so2_nox_pm_hg=system.file("extdata", "CALPUFF_7.0_template_Hg.INP", package="creapuff"),
                           so2_nox_pm=system.file("extdata", "CALPUFF_7.0_template.INP", package="creapuff"))[[species_configuration]]
-){
+) {
+  # Add non-emitted species
+  modeled_polls <- c("SO2","SO4","NO","NO2","HNO3","NO3","PM15","PM10","PPM25")
+  if("RGM" %in% emitted_polls) modeled_polls %<>% c("HG0", "RGM")
   
   result = list() # Storing results we'll need for CALPUFF
   
@@ -64,29 +69,13 @@ runCalpuff <- function(
   
   if(!is.null(emissions_data)) {
     
-  # Lauri. Speciation data from Lee et al. (2006).  
-  #   "FGD  HG0 RGM Hgp
-  # F 43.9  54  2.1
-  # T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
-  #     mutate_if(is.numeric, divide_by, 100) ->
-  #     hg_species
   
-  # LC. Speciation data from Zhang et al. (2016), "Mercury transformation and speciation in flue gas... "
-   speciation_matrix <- data.frame(AQCS=c("ESP+wFGD","ESP","FF","none","CFBC"),
-                                   FGD=c(T,F,F,F,F),
-                                   HG0=c(84,58,50,56,72),
-                                   RGM=c(16,41,49,34,27),
-                                   Hgp=c(0.6,1.3,0.5,10,0.6)) %>%  mutate_if(is.numeric, divide_by, 100)
-
     #rename columns to use default variable names
-    emissions_data %<>% rename(Stack.height=contains("Stack height"), 
+    emissions_data %<>% rename(Stack.height=matches("Stack.height"), 
                         velocity=contains("velocity"),
                         diameter = contains("Diameter"),
                         exit.temp = contains("Temperature"))
     
-    inpfiles_created <- character(0)
-    
-    inpfiles_created <- list()
     runsources_out=list()
     pm10fraction=list()
     
@@ -94,53 +83,99 @@ runCalpuff <- function(
     runsources %>% coordinates() %>% data.frame() %>% 
       set_names(c('UTMx', 'UTMy')) %>% data.frame(runsources@data, .) -> runsources@data
     
-    if (!is.null(source_names))  # LC : priority to external parameters
-      runsources$source_names <- source_names %>% gsub(' ', '', .) %>% substr(1,5) %>% make.names %>% make.unique(sep='')
-    else 
-      if (is.null(runsources$source_names)) {
-        source_names <- rep("s", nrow(emissions_data)) %>% make.names %>% make.unique(sep='')
-        runsources$source_names <- source_names
-      }
+    if(!is.null(source_names)) { # LC : priority to external parameters
+      if(max(nchar(source_names))>8 | any(duplicated(source_names)))
+        source_names %<>% gsub(' ', '', .) %>% make_srcnam
     
-    ifelse (!is.null(FGD), FGD, ifelse(!is.null(runsources$FGD), runsources$FGD, stop("error : no information on FGD of emission sources (TRUE / FALSE)"))
-            ) %>% as.logical() -> runsources$FGD # LC : priority to external parameters 
-
-    ifelse (!is.null(AQCS), AQCS, ifelse(!is.null(runsources$AQCS), runsources$AQCS, stop("error : no information on AQCS of emission sources (ESP+wFGD / ESP / FF / none / CFBC)"))
-    ) -> runsources$AQCS # LC : priority to external parameters
+      runsources$source_names <- source_names
+    }
+    
+    if(is.null(runsources$source_names)) {
+      source_names <- rep("s", nrow(emissions_data)) %>% make.names %>% make.unique(sep='')
+      runsources$source_names <- source_names
+    }
+    
+    if('RGM' %in% emitted_polls) {
+      # Lauri. Speciation data from Lee et al. (2006).  
+      #   "FGD  HG0 RGM Hgp
+      # F 43.9  54  2.1
+      # T 74.2  24  1.8" %>% textConnection %>% read.table(header=T) %>% 
+      #     mutate_if(is.numeric, divide_by, 100) ->
+      #     hg_species
+      
+      # LC. Speciation data from Zhang et al. (2016), "Mercury transformation and speciation in flue gas... "
+      speciation_matrix <- data.frame(AQCS=c("ESP+wFGD","ESP","FF","none","CFBC"),
+                                      FGD=c(T,F,F,F,F),
+                                      HG0=c(84,58,50,56,72),
+                                      RGM=c(16,41,49,34,27),
+                                      Hgp=c(0.6,1.3,0.5,10,0.6)) %>%  mutate_if(is.numeric, divide_by, 100)
+      
+      if(is.null(FGD) & is.null(runsources$FGD)) stop("error : no information on FGD of emission sources (TRUE / FALSE)")
+      
+      if(!is.null(FGD)) runsources$FGD <- FGD # LC : priority to external parameters 
+      
+      if(!is.null(monthly_scaling)) {
+        
+        #monthly emissions scaling
+        same_scaling_for_all = all(monthly_scaling$apply_to=='all')
+        
+        #Subgroup (13d)
+        expand.grid(SRCNAM = runsources$emission_names,
+                    SPEC = emitted_polls,
+                    stringsAsFactors = F) %>% 
+          mutate(scale_by_pollutant=case_when(SPEC=='SO2'~'SO2', grepl('^NO', SPEC)~'NOx', grepl('^P?PM', SPEC)~'PM', grepl('^HG|RGM', SPEC)~'Hg'),
+                 scale_by_facility=case_when(same_scaling_for_all~'all', T~SRCNAM),
+                 nr=seq_along(SRCNAM),
+                 str=paste0(nr," ! SCALEFACTOR = ",SRCNAM,", ",SPEC,", ",scale_by_facility,'_',scale_by_pollutant," !  !END!")) %>% 
+          use_series(str) ->
+          addsubgroups$X13d
+        
+        #Subgroup (19b)
+        monthly_scaling %>% 
+          group_by(apply_to, pollutant) %>% 
+          group_map(function(df, group) {
+            c(paste0("!FACTORNAME = ",group$apply_to,'_',group$pollutant," !"),
+              "!FACTORTYPE = MONTH12 !",
+              paste("!FACTORTABLE =",df$monthscaling,"!"),
+              "!END!")
+          }) %>% unlist %>% unname -> 
+          addsubgroups$X19b
+        
+        addparams$NSPT1 = length(monthscalingsubgroups$X13d)
+        addparams$NSFTAB = length(monthscalingsubgroups$X19b)/4
+      }
+    }
     
     if(is.null(runsources$base.elevation..msl))
       runsources$base.elevation..msl <- get_plant_elev(runsources,
                                                        dir=output_dir,
                                                        files_met=out_files)
     
-    for(emission_col in c('SO2_tpa', 'NOx_tpa', 'PM_tpa', 'Hg_kgpa', emitted_polls, 'downwash'))
-      if(is.null(runsources[[emission_col]])) runsources[[emission_col]]=0
+    runsources %<>% add_missing_columns(c('SO2_tpa', 'NOx_tpa', 'PM_tpa', 'Hg_kgpa', 'downwash'))
     
-    if(!is.null(runsources$SO2)) runsources@data %<>% mutate(SO2 = SO2_tpa)  # LC, mutate if "!is.null"
+    if(is.null(runsources$SO2)) runsources@data %<>% mutate(SO2 = SO2_tpa)  # LC, mutate if "!is.null"
     
-    if(!is.null(runsources$NO)) runsources@data %<>% mutate(NO  = NOx_tpa * .95 * 30/46,  # LC, mutate if "!is.null"
+    if(is.null(runsources$NO)) runsources@data %<>% mutate(NO  = NOx_tpa * .95 * 30/46,  # LC, mutate if "!is.null"
                                                             NO2 = NOx_tpa * .05)
     
-    if(!is.null(runsources$PPM25)) runsources@data %<>% mutate(PM15 = PM_tpa * 26/80,  # LC, mutate if "!is.null"
+    if(is.null(runsources$PPM25)) runsources@data %<>% mutate(PM15 = PM_tpa * 26/80,  # LC, mutate if "!is.null"
                                                                PM10 = PM_tpa * 30/80,
                                                               PPM25 = PM_tpa * 24/80)
-    if(!is.null(runsources$RGM)){
-        if(runsources$FGD==T) runsources$AQCS = "ESP+wFGD" # If FGD is TRUE we use the standard values for ESP+wFGD. For the moment, no data for other AQCS types. 
-        runsources@data %<>% mutate(HG0 = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(HG0),
-                                    RGM = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(RGM),
-                                    Hgp = Hg_kgpa * speciation_matrix %>% filter (FGD==runsources$FGD) %>% filter (AQCS==runsources$AQCS) %>% pull(Hgp))
+    if(is.null(runsources$RGM) & 'RGM' %in% emitted_polls){
+        runsources$AQCS[runsources$FGD] <- "ESP+wFGD" # If FGD is TRUE we use the standard values for ESP+wFGD. For the moment, no data for other AQCS types. 
+        speciation_matrix %>% 
+          left_join(runsources@data %>% select(-any_of(c('HG0', 'RGM', 'Hgp'))), .) %>% 
+          mutate(across(c(HG0,RGM,Hgp), multiply_by, Hg_kgpa)) ->
+          runsources@data
     }
     
     runsources$exit.temp %<>% (function(x) x+ifelse(x < 273, 273.15, 0))
     
+    runsources %<>% add_missing_columns(modeled_polls)
     runsources@data %>% ungroup %>% 
       select(UTMx, UTMy, Stack.height, base.elevation..msl, diameter, velocity, exit.temp, downwash,
-             all_of(emitted_polls)) -> runsources2
+             all_of(modeled_polls)) -> runsources2
     
-    # Non-emitted species
-    runsources2  %<>% mutate(SO4=0) %<>% relocate (SO4, .after=SO2)
-    runsources2  %<>% mutate(HNO3=0) %<>% relocate (HNO3, .after=NO2)
-    runsources2  %<>% mutate(NO3=0) %<>% relocate (NO3, .after=HNO3)
     
     runsources2 %>% 
       mutate_all(signif, 6) %>% mutate_all(format, nsmall=1) %>% 
@@ -149,7 +184,7 @@ runCalpuff <- function(
     print("__________ Plant specifications ___________")
     print(runsources2[1:8])
     print("______________ Emission rates _____________")
-    print(runsources2[9:19])
+    print(runsources2[-1:-8])
     print("")
     
     # Modeled species (11 species)
@@ -184,9 +219,69 @@ runCalpuff <- function(
     runsources=NULL    # LC
   }  
   
+  if(!is.null(area_sources)) {
+    if(!('sf' %in% class(area_source_coords)))
+      area_sources %<>% to_spdf %>% st_as_sf() %>% group_by(emission_names) %>% summarise('MULTIPOINT') %>% st_cast('POLYGON')
+    
+    area_sources %<>% st_transform(crs=target_crs)
+    
+    if(is.null(area_sources$base_elevation))
+      area_sources %>% 
+      st_centroid() %>% 
+      as('Spatial') %>% 
+      get_plant_elev(dir=output_dir,
+                     files_met=out_files) ->
+      area_sources$base_elevation
+    
+    if(is.null(area_sources$emission_height)) area_sources$emission_height <- 5
+    if(is.null(area_sources$height_sigma)) area_sources$height_sigma <- area_sources$emission_height
+    
+    area_sources %<>% add_missing_columns(modeled_polls)
+    
+    #divide emission rates by area
+    #required emission unit is metric tons/m**2/yr
+    area_sources %>% st_area() %>% as.numeric() %>% multiply_by(1e6) -> 
+      area_sources$area_m2
+    
+    area_sources %<>% mutate(across(all_of(modeled_polls), divide_by, area_m2))
+    
+    addsubgroups$X14b = 
+      area_sources %>% group_by(emission_names) %>% 
+      mutate(across(all_of(modeled_polls), signif, 6)) %>% 
+      unite('array_str', emission_height, base_elevation, height_sigma, all_of(modeled_polls), sep=', ') %>% 
+      group_map(function(df, group) {
+        c(paste("! SRCNAM =",group$emission_names,"!"),
+          paste("! X = ", df$array_str, "!"),
+          "!END!")
+      })
+    
+    
+    addsubgroups$X14c = 
+      area_sources %>% group_by(emission_names) %>% 
+      group_map(function(df, group) {
+        df %>% st_coordinates() %>% as_tibble %>% head(4) %>% 
+          mutate(across(c(X, Y), round, 3)) %>% 
+          summarise(across(c(X, Y), paste, collapse=', ')) -> coords_out
+        c(paste("! SRCNAM =",group$emission_names,"!"),
+          paste("! XVERT = ", coords_out$X, "!"),
+          paste("! YVERT = ", coords_out$Y, "!"),
+          "!END!")
+      })
+    
+    addparams$NAR1 <- nrow(area_sources)
+  }
+  
   if(is.null(addparams$DATUM)) addparams$DATUM="WGS-84"
   receptors_selected = NULL
   if(!is.null(receptors)) receptors %>% subset(include) %>% make_topo_rows -> receptors_selected 
+  
+  print("______________ Additional subgroups written to CALPUFF.INP _____________")
+  print(addsubgroups)
+  print("")
+  print("______________ Additional parameters written to CALPUFF.INP _____________")
+  print(addparams)
+  print("")
+  
   
   make_calpuff_inp(out_files,
                    calpuff_template=calpuff_template,
