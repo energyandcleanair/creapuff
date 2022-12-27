@@ -600,20 +600,29 @@ get_out_files <- function(runDir, out_file_ext, batch_subset=NULL) {
 set_puff <- function(inpfile, paramdf, set.all=T) {
   if(!is.data.frame(paramdf))
     paramdf %<>% unlist %>% data.frame(name = names(.), val= .)
-  for(param in paramdf$name) {
+  for(param in unique(paramdf$name)) {
     val.count = sum(paramdf$name==param)
     ln = grep(paste0('!',param,'='),gsub(' ','',inpfile))
-    if(length(ln) < val.count) {
+    
+    #add new parameter rows when needed
+    if(length(ln)>0 & length(ln) < val.count) {
       missing.count <- val.count - length(ln)
-      ln %<>% c(grep(paste0('\\*',param,'='),gsub(' ','',inpfile))[1:missing.count])
-      inpfile[ln] %<>% gsub("\\*", "!", .)
+      last.entry <- tail(ln, 1)
+      inpfile <- c(inpfile[1:last.entry],
+                   rep(inpfile[last.entry], missing.count),
+                   inpfile[-1:-last.entry])
+      
+      ln = grep(paste0('!',param,'='),gsub(' ','',inpfile))
+      #Old solution: un-comment existing rows
+      #ln %<>% c(grep(paste0('\\*',param,'='),gsub(' ','',inpfile))[1:missing.count])
+      #inpfile[ln] %<>% gsub("\\*", "!", .)
     }
     
     
     if(any(is.na(paramdf[paramdf$name==param,'val']))) stop(paste('parameter ',param,' has value NA!'))
     
     if(length(ln) == val.count) {
-      if(paramdf[paramdf$name==param,'val'] != "not set") {
+      if(all(paramdf[paramdf$name==param,'val'] != "not set")) {
         for(i in 1:length(ln)) {
           m <- regexpr(paste0('=[^!]*!'),inpfile[ln][i])
           regmatches(inpfile[ln][i],m) <-  paste0('= ',paramdf[paramdf$name==param,'val'][i],' !')

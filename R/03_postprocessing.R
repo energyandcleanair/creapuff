@@ -69,8 +69,8 @@ runPostprocessing <- function(
   
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("BCKNH3","BCKNH3")
   inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("MODDAT","CONDAT")
-  if(nrow(files_met)==1) inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT") 
-  else inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT1")
+  if(nrow(files_met)==1) { inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT") 
+  } else inparams[nrow(inparams)+1,c('name', 'cpuname')] <- c("UTLMET","METDAT1")
   
   params <- inparams
   params$val <- NA
@@ -104,38 +104,44 @@ runPostprocessing <- function(
   params[nrow(params)+1,] <- c('UTLDAT', gsub("\\.CON", "_repart.CON", conF))
   params[nrow(params)+1,] <- c('NPER', nper)
   
+  params %>% filter(name!='ABTZ') -> pu_params
+  
   if(run_concentrations) {
+    
     if(!is.null(files_met))
-      params[params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(METDAT) %>%
+      pu_params[params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(METDAT) %>%
         head(1)
     
     # Write repartitioning INP file
     write_input(pu_templates$repartition, 
                 file.path(output_dir, paste0(run_name, pu.inp.out$repartition)),
-                params)
+                pu_params)
     
     # Write_input file to calculate total PM
-    params[params$name == 'MODDAT', 'val'] <- params[params$name == 'UTLDAT', 'val']
-    params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_TotalPM.CON", conF)
-    params[params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
-    params[!(params$name %in% c('BCKNH3', 'UTLMET')), ] -> params
+    pu_params[pu_params$name == 'MODDAT', 'val'] <- pu_params[pu_params$name == 'UTLDAT', 'val']
+    pu_params[pu_params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_TotalPM.CON", conF)
+    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
+    pu_params[!(pu_params$name %in% c('BCKNH3', 'UTLMET')), ] -> pu_params
+    
+    pu_params %>% bind_rows(tibble(name='ASPECO', val=cp_species)) -> totalPM_params
+    totalPM_params %<>% rbind(tibble(name='NSPECOUT', val=length(cp_species)))
     
     write_input(pu_templates$total_pm, 
                 file.path(output_dir, paste0(run_name, pu.inp.out$total_pm)),
-                params)
+                totalPM_params)
   }
   
   if(run_deposition) {
     # Write deposition INP file
     pu.depo.out = file.path(output_dir, paste0(run_name, pu.inp.out$deposition))
-    params[params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
-    params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", ".WET", conF)
-    params[params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
+    pu_params[pu_params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
+    pu_params[pu_params$name == 'MODDAT', 'val'] <- gsub("\\.CON", ".WET", conF)
+    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
     
-    params[nrow(params)+1,] <- c('MODDAT', gsub("\\.CON", ".DRY", conF))
+    pu_params[nrow(pu_params)+1,] <- c('MODDAT', gsub("\\.CON", ".DRY", conF))
     write_input(pu_templates$deposition, 
                 pu.depo.out,
-                params)
+                pu_params)
     
     # Add the Hg fraction in PM
     pu.depo.out %>% readLines -> pu.depo
@@ -178,6 +184,7 @@ runPostprocessing <- function(
     # write_input file to get all concentration outputs
   
     species_params = list(LTIME=ifelse(run_timeseries, 'T', 'F'),
+                          NSPEC = length(cp_species),
                           ASPEC   = cp_species %>% paste(collapse=', '),
                           ILAYER  = rep(1, length(cp_species)) %>% paste(collapse=', '),
                           IPRTU = rep(3, length(cp_species)) %>% paste(collapse=', '),
@@ -186,7 +193,7 @@ runPostprocessing <- function(
                           L1PD = rep('F', length(cp_species)) %>% paste(collapse=', '),
                           L3HR = rep('F', length(cp_species)) %>% paste(collapse=', '),
                           LRUNL = rep('T', length(cp_species)) %>% paste(collapse=', '),
-                          L1HR = (cp_species %in% run_hourly) %>% as.character() %>% substr(1,1),
+                          L1HR = (cp_species %in% run_hourly) %>% as.character() %>% substr(1,1) %>% paste(collapse=', '),
                           L24HR   = rep('T', length(cp_species)) %>% paste(collapse=', ')) %>% 
       unlist %>% data.frame(name = names(.), val= .)
     
@@ -199,6 +206,7 @@ runPostprocessing <- function(
   if(run_deposition) {
     # Write_input file to get all deposition outputs
     params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
+    params[params$name == 'PSTLST', 'val'] <- gsub("\\.CON", "_Depo_CALPOST.LST", conF)
     write_input(calpost_templates$deposition, 
                 file.path(output_dir, paste0(run_name, cp.inp.out$deposition)),
                 params,
