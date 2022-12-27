@@ -1,7 +1,7 @@
 Package: creapuff
 Type: Package
 Title: CREAPUFF: R package to work with CALMET and CALPUFF
-Version: 0.1
+Version: 0.2
 Authors@R: c(
     person("Hubert", "Thieriot", email = "hubert@energyandcleanair.org", role = c("cre","aut")),
     person("Lauri", "Myllyvirta", email = "lauri@energyandcleanair.org", role = c("aut")),
@@ -49,4 +49,4 @@ Suggests:
     testthat(>= 2.1.0)
 VignetteBuilder:
     knitr
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2

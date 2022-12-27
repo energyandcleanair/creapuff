@@ -4,12 +4,19 @@ test_data_dir <- function(){
   if(dir.exists("../test_data")) "../test_data" else "tests/test_data"
 }
 
+#identify dirs with calpost outputs to work with
+test_output_dirs <- function(){
+  candidates <- list.dirs(test_data_dir(), recursive = F)
+  has_plants <- file.exists(file.path(candidates, 'plants.csv'))
+  candidates[has_plants]
+}
+
 
 test_that("get_grids_calpuff works", {
   
   expect_true(dir.exists(test_data_dir()))
   
-  for(example_dir in list.dirs(test_data_dir(), recursive = F)){
+  for(example_dir in test_output_dirs()){
     print(example_dir)
     
     # Get list of files
@@ -36,7 +43,7 @@ test_that("make_tifs works", {
   
   expect_true(dir.exists(test_data_dir()))
   
-  for(example_dir in list.dirs(test_data_dir(), recursive = F)){
+  for(example_dir in test_output_dirs()){
     print(example_dir)
     
     # Remove preexisting tif files
@@ -75,12 +82,12 @@ test_that("make_tifs works", {
 
 test_that("plotting works", {
   
-  gis_dir = "/Volumes/ext1/gis/"
+  gis_dir <- "F:/gis"
   readRenviron("../.Renviron")
   
   expect_true(dir.exists(test_data_dir()))
   
-  for(example_dir in list.dirs(test_data_dir(), recursive = F)){
+  for(example_dir in test_output_dirs()){
     print(example_dir)
     
     # Get list of files
@@ -99,11 +106,12 @@ test_that("plotting works", {
     
     # Make tifs
     creapuff::make_tifs(calpuff_files=calpuff_files, grids=grids)
+    calpuff_files <- creapuff::get_calpuff_files(ext='\\.tif', dir=example_dir)
     
     # Plot - PNG
     png_files <- list.files(example_dir, ".png", full.names = T)
     file.remove(png_files)
-    creapuff::plot_results(dir=example_dir, plants=plants, outputs="png")
+    creapuff::plot_results(calpuff_files, dir=example_dir, plants=plants, outputs="png")
     png_files <- list.files(example_dir, ".png", full.names = T)
     expect_gt(length(png_files), 0)
     
