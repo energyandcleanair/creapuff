@@ -10,9 +10,10 @@ runCalpuff(
   emissions_data = NULL,
   source_names = NULL,
   FGD = NULL,
+  AQCS = NULL,
   species_configuration = NULL,
   emitted_polls = list(so2_nox_pm_hg = c("SO2", "NO", "NO2", "PM15", "PM10", "PPM25",
-    "HG0", "RGM", "Hgp"), so2_nox_pm = c("SO2", "NO", "NO2", "PM15", "PM10",
+    "HG0", "RGM"), so2_nox_pm = c("SO2", "NO", "NO2", "PM15", "PM10",
     "PPM25"))[[species_configuration]],
   receptors = NULL,
   bgconcs = NULL,
@@ -26,7 +27,8 @@ runCalpuff(
   calpuff_template = list(so2_nox_pm_hg = system.file("extdata",
     "CALPUFF_7.0_template_Hg.INP", package = "creapuff"), so2_nox_pm =
     system.file("extdata", "CALPUFF_7.0_template.INP", package =
-    "creapuff"))[[species_configuration]]
+    "creapuff"))[[species_configuration]],
+  how_many_batches = 1
 )
 }
 \arguments{
