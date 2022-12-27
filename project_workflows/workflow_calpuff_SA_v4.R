@@ -4,6 +4,7 @@
 
 
 require(raster)
+require(sf)
 library(readxl)
 library(writexl)
 library(lubridate)
@@ -13,7 +14,7 @@ library(pbapply)
 require(creahelpers)
 require(ncdf4)
 
-#library(creapuff)
+# library(creapuff)
 
 #development
 source('R/env.R')
@@ -74,7 +75,6 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 
 
 # CALMET #######################################################################
-
 
 calmet_result <- creapuff::runCalmet(
   input_xls = input_xls,
@@ -319,6 +319,8 @@ if (emission_type == "constant") {
   # calpuff_template = calpuff_template)
 }
 
+save.image(file.path(project_dir, 'calpuff.RData'))
+
 if (emission_type == "varying") {
   queue = unique(emissions_data$emission_names)
   for(run in queue) {
@@ -362,73 +364,60 @@ if (emission_type == "varying") {
 
 browser()
 
-for (i_Sc in seq(1,2)) {
+
 # POST-PROCESSING ##############################################################
-# ============================ All clusters together ============================
-# 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
 # Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
 calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
-names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
-names(inpfiles_created) <- names(calpuff_results_all)
+runs <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)
+names(calpuff_results_all) <- runs
+names(inpfiles_created) <- runs
 
-# ========================== Scenario definition ===============================
-# # --- Scenario ScA : old limits (2008), from coal consumption
-# scenario_prefix <- "ScA"   # Max 8 char  # included_stations = names(inpfiles_created)
-# included_stations <- names(inpfiles_created)[grep("oCC", names(inpfiles_created) )]
+queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '.CON') %>% file.exists() %>% '['(names(inpfiles_created), .)
 
-# --- Two main scenarios : 
-if (i_Sc==1) {scenario_prefix <- "ScA"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='Next Future']}
-if (i_Sc==2) {scenario_prefix <- "ScB"; included_stations <- emissions_data$emission_names}
-# if (i_Sc==2) {scenario_prefix <- "ScB"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='Next Future', emissions_data$Scenario=='Future']}
-# if (i_Sc==3) {scenario_prefix <- "ScS" ; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, FGD, 130 degrees']}
-# if (i_Sc==4) {scenario_prefix <- "ScW"; included_stations <- emissions_data$emission_names[emissions_data$Scenario=='2008 standards, no FGD']}
+calpuff_results_all[['LCPP_mine']]$pm10fraction <- .45e-3
 
-# ---
-calpuff_results_all[names(calpuff_results_all) %in% included_stations == TRUE]  -> calpuff_results_all
-inpfiles_created[names(inpfiles_created) %in% included_stations == TRUE]  -> inpfiles_created
-emissions_data %>% filter(emissions_data$emission_names %in% names(inpfiles_created)  == TRUE)  -> emissions_data_scenario
-write_xlsx(list("CALPUFF input"=emissions_data_scenario), file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")))
+for(scen in queue) {
+  # ==============================================================================
+  # 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
+  # - concentrations (.CON), no need for nitrate reparation (MNITRATE = 0), a further run will do the repartition
+  # - deposition (.DRY, .WET) (together with acid, mercury, dust species)
+  
+  # Generate PU and CP INP files
+  runPostprocessing(
+    calpuff_inp=inpfiles_created[scen],
+    output_dir=output_dir,
+    files_met = out_files,
+    pm10fraction=calpuff_results_all[[scen]]$pm10fraction,
+    METRUN = 0,  
+    nper = NULL,
+    pu_start_hour = NULL,
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'PPM25', 'SO4', 'NO3'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_period_function = get_cp_period,
+    run_discrete_receptors=T,
+    run_gridded_receptors=F,
+    run_concentrations=T,
+    run_deposition=T,
+    run_timeseries = F,
+    run_hourly = c(), #c('PM25', 'NO2', 'SO2'),
+    run_pu=F,
+    run_calpost=F,
+    pu_templates = pu_templates,
+    calpost_templates=calpost_templates
+  )
+}
 
-# ==============================================================================
-# 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
-# - concentrations (.CON), no need for nitrate reparation (MNITRATE = 0), a further run will do the repartition
-# - deposition (.DRY, .WET) (together with acid, mercury, dust species)
-files_met <- out_files  # or calpuff_results_all[[1]]$out_files  # All clusters have the same meteo
-first_cluster_inp <- inpfiles_created[1]
-first_cluster_name <- names(inpfiles_created)[1]
-calpuff_results_all %>% lapply('[[', 'pm10fraction') %>% unlist %>% mean() -> pm10fraction 
 
-# Generate "generic" PU and CP INP files (only for the first cluster, run_pu=F, run_calpost=F)
-creapuff::runPostprocessing(
-  calpuff_inp=first_cluster_inp,
-  output_dir=output_dir,
-  files_met = files_met,
-  pm10fraction=pm10fraction,
-  METRUN = 0,  
-  nper = NULL,
-  pu_start_hour = NULL,
-  cp_species = c('PM25', 'TPM10', 'SO2', 'NO2'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
-  cp_period_function = get_cp_period,
-  run_discrete_receptors=T,
-  run_gridded_receptors=F,
-  run_concentrations=T,
-  run_deposition=T,
-  run_timeseries = T,
-  run_hourly = c('PM25', 'NO2', 'SO2'),
-  run_pu=F,
-  run_calpost=F,
-  pu_templates = pu_templates,
-  calpost_templates=calpost_templates
-)
 
-# Read generic inp files
-pu_template_desinence <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
-pu_sumruns_template_generic=paste0(first_cluster_name, pu_template_desinence$repartition)
-pu_sumruns_depo_template_generic=paste0(first_cluster_name, pu_template_desinence$depo)
+#SUMRUNS for all Eskom stations
+
+# Read sample inp files
+pu_template_suffixes <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
+pu_sumruns_template = paste0(runs[1], pu_template_suffixes$repartition)
+pu_sumruns_depo_template=paste0(runs[1], pu_template_suffixes$depo)
 readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
 readLines(file.path(output_dir,pu_sumruns_depo_template_generic)) -> inp_depo
-
+  
 # Define current input-data list  
 sumfiles = paste0(toupper(names(inpfiles_created)), '.CON')  
 sumfiles_depo = append (paste0(toupper(names(inpfiles_created)), '.DRY'), paste0(toupper(names(inpfiles_created)), '.WET'))
@@ -439,8 +428,8 @@ inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters 
                        UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.LST")),  # Output LST file
                        UTLDAT = file.path(output_dir,paste0(scenario_prefix,".CON"))))                  # Output data file, for concentrations (.CON)
 inp_depo %<>% set_puff(list(NFILES = length(sumfiles_depo),  # Function to set parameters in a CALPUFF input file
-                       UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_Depo.LST")),            # Output LST file. Filename-format as ScAll_POSTUTIL_Depo.LST
-                       UTLDAT = file.path(output_dir,paste0(scenario_prefix,"_Depo.FLX"))))                    # Output data file, for fluxes (.FLX). Filename-format as ScAll_Depo.FLX
+                            UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_Depo.LST")),            # Output LST file. Filename-format as ScAll_POSTUTIL_Depo.LST
+                            UTLDAT = file.path(output_dir,paste0(scenario_prefix,"_Depo.FLX"))))                    # Output data file, for fluxes (.FLX). Filename-format as ScAll_Depo.FLX
 
 # Fill the corresponding lines for with current input-data list (CALPUFF outputs)
 con_line <- grep("!MODDAT=", gsub(" ", "", inp))  # Looking for input-data position index 
@@ -449,8 +438,8 @@ inp <- c(inp[1:(con_line-1)],
          inp[-1:-con_line])
 con_line_depo <- grep("!MODDAT=", gsub(" ", "", inp_depo))  # Looking for input-data position index
 inp_depo <- c(inp_depo[1:(con_line_depo-1)],
-         paste("   ",1:length(sumfiles_depo),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles_depo),"! !END!"),  # For deposition (.DRY, .WET)
-         inp_depo[-1:-con_line_depo[2]])
+              paste("   ",1:length(sumfiles_depo),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles_depo),"! !END!"),  # For deposition (.DRY, .WET)
+              inp_depo[-1:-con_line_depo[2]])
 
 # Write the _POSTUTIL_SUMRUNS.INP and  _postutil_depo.inp files
 pu_sumruns_template_all <- file.path(output_dir, paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.INP"))
@@ -464,6 +453,27 @@ writeLines(c(paste("cd", output_dir),
              paste0(pu_exe, " ", normalizePath(pu_sumruns_template_all)),
              "pause"), 
            pu_sumruns_bat)  # shell.exec(normalizePath(pu_sumruns_bat)) 
+
+
+# -------------
+#   Subgroup (2d)
+# -------------
+#   
+#   Each species in NSCALED CALPUFF data files may be scaled before being
+# processed (e.g., to change the emission rate for all sources modeled
+#            in the run that produced a data file).  For each file, identify the
+# file name and then provide the name(s) of the scaled species and the
+# corresponding scaling factors (A,B where x' = Ax+B).
+# 
+#                A(Default=1.0)      B(Default=0.0)
+#                --------------      --------------
+# 
+# * MODDAT =NOFILES.DAT    *
+# *     SO2  =      1.1,                 0.0   *
+# *     SO4  =      1.5,                 0.0   *
+# *    HNO3  =      0.8,                 0.0   *
+# *     NO3  =      0.1,                 0.0   *
+# *END*
 
 
 # 2. Define PU and CP INP and bat files, for summed-up concentrations   
@@ -509,5 +519,4 @@ if(exit_code != 0) stop("errors in POSTUTIL execution")
 system2(cp_bat) -> exit_code
 if(exit_code != 0) stop("errors in CALPOST execution")
 
-}
 
