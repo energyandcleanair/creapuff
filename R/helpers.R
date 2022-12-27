@@ -531,8 +531,8 @@ make_tifs <- function(calpuff_files,
                                          proj4string = CRS(proj4string(grids$gridSP)))
         pollSP %<>% crop(extent(grids$gridR)+30.1)
         
-        conc_idw <- idw(as.formula(paste0("conc"," ~ 1")),
-                        pollSP, grids$gridSP, nmax=nmax, idp=idp, ...)
+        conc_idw <- gstat::idw(as.formula(paste0("conc"," ~ 1")),
+                               pollSP, grids$gridSP, nmax=nmax, idp=idp, ...)
         conc_R <- raster(conc_idw,values=T)
         conc_R %<>% crop(grids$gridR)
         
