@@ -18,7 +18,7 @@ make_titletxt = function(calpuff_files) {
   paste0(ifelse(calpuff_files[["hr"]]<=24,paste0("Maximum ",calpuff_files[["hr"]],"-hour "),
                 ifelse(calpuff_files[["type"]]=="concentration","Annual mean ","Annual total ")),
          calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
-         "\nfrom ",calpuff_files[["scenarioName"]])
+         "\nfrom ",calpuff_files[["scenario_description"]])
 }
 
 #' Title
@@ -34,8 +34,8 @@ make_titletxt = function(calpuff_files) {
 #'
 #' @examples
 plot_results <- function(calpuff_files,
-                         scenario_names = calpuff_files$scenarioName,
-                         dir=dirname(calpuff_files$path[1]),
+                         scenario_names = calpuff_files$scenario_description,
+                         output_dir=dirname(calpuff_files$path[1]),
                          map_res=1,
                          plants=NULL,
                          plant_names=NULL,
@@ -69,8 +69,9 @@ plot_results <- function(calpuff_files,
   
   # Output maps
   if("kml" %in% outputs) {
+    require(plotKML)
     label_file <- system.file("extdata", "factory.png", package="creapuff")
-    file.copy(label_file, file.path(dir, basename(label_file)))
+    file.copy(label_file, file.path(output_dir, basename(label_file)))
   }
   
   adm_utm <- creahelpers::get_adm(adm_level, res="low") %>% creahelpers::cropProj(grids$gridR)
@@ -78,8 +79,8 @@ plot_results <- function(calpuff_files,
   expPop <- list()
   popCP = make_pop(grids = grids)
   
-  calpuff_files$scenarioName <- scenario_names
-  if(is.null(calpuff_files$scenarioName)) calpuff_files$scenarioName <- calpuff_files$scenario
+  if(is.null(calpuff_files$scenario_description)) calpuff_files$scenario_description <- scenario_names
+  if(is.null(calpuff_files$scenario_description)) calpuff_files$scenario_description <- calpuff_files$scenario
   
   if(is.null(calpuff_files$titletxt)) calpuff_files$titletxt <- make_titletxt(calpuff_files)
   
@@ -104,6 +105,7 @@ plot_results <- function(calpuff_files,
   #output maps
   for(file in queue) {
     files[file] %>% raster() -> conc_R
+    outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
     
     disaggregation_factor = ceiling(mean(res(conc_R))/map_res)
     if(disaggregation_factor>1) conc_R %<>% disaggregate(disaggregation_factor, method='bilinear')
@@ -146,8 +148,7 @@ plot_results <- function(calpuff_files,
       parSets$axis.line=list(lwd=3)
       parSets$panel.background$col <- colRamp[length(colRamp)]
       
-      outpng <- gsub("\\.csv|\\.tif",paste0("_levelplot",filename_suffix,".png"),files[file])
-      png(filename =  outpng,
+      png(filename =  file.path(output_dir, paste0(outL,filename_suffix,".png")),
           width = 3000, height = 2000, units = "px",
           bg = "white",res=200)
       
@@ -155,31 +156,31 @@ plot_results <- function(calpuff_files,
                       margin=F,cex=.8,at=plumeBreaks[-length(plumeBreaks)],
                       par.settings=parSets,
                       main=calpuff_files[file,"titletxt"],ylab.right=calpuff_files[file,"unit"]) +
-        layer(sp::sp.lines(adm_utm, lwd=3, col='darkgray'),
-              data=list(adm_utm=adm_utm))
+        latticeExtra::layer(sp::sp.lines(adm_utm, lwd=3, col='darkgray'),
+                            data=list(adm_utm=adm_utm))
       
       if(!is.null(plants_plot)) {
-        pl = pl + layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7),
-                        data=list(plants_plot=plants_plot))
+        pl = pl + latticeExtra::layer(sp.points(plants_plot, pch=24,lwd=1.5, col="white",fill="red",cex=.7),
+                                      data=list(plants_plot=plants_plot))
       }
       
       pl = pl + 
-        layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol), 
-              data=list(cityPlot=cityPlot, labelcol=labelcol)) +
-        layer(sp.text(coords, txt = cityPlot$name, pos = cityPlot$pos, 
-                      col=labelcol,font=1, cex=.7),
-              data=list(cityPlot=cityPlot,
-                        coords=sp::coordinates(cityPlot),
-                        labelcol=labelcol))
+        latticeExtra::layer(sp.points(cityPlot, pch=1,lwd=3, col=labelcol), 
+                            data=list(cityPlot=cityPlot, labelcol=labelcol)) +
+        latticeExtra::layer(sp.text(coords, txt = cityPlot$name, pos = cityPlot$pos, 
+                                    col=labelcol,font=1, cex=.7),
+                            data=list(cityPlot=cityPlot,
+                                      coords=sp::coordinates(cityPlot),
+                                      labelcol=labelcol))
       
       if(!is.null(plant_names)) {
-        pl = pl + layer(sp.text(coords,
-                                txt = plants_plot$Source %>% lapply(rep,16) %>% unlist, 
-                                pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1)),
-                        data=list(plants_plot=plants_plot,
-                                  coords=textbuffer(sp::coordinates(plants_plot),width=1.2,steps=16))) +
-          layer(sp.text(coords, txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"),
-                data=list(plants_plot=plants_plot, coords=sp::coordinates(plants_plot)))
+        pl = pl + latticeExtra::layer(sp.text(coords,
+                                              txt = plants_plot$Source %>% lapply(rep,16) %>% unlist, 
+                                              pos = 4,font=2,cex=.6,col=rgb(1,1,1,alpha=1)),
+                                      data=list(plants_plot=plants_plot,
+                                                coords=textbuffer(sp::coordinates(plants_plot),width=1.2,steps=16))) +
+          latticeExtra::layer(sp.text(coords, txt = plants_plot$Source, pos = 4,font=2,cex=.6,col="red"),
+                              data=list(plants_plot=plants_plot, coords=sp::coordinates(plants_plot)))
       }
       
       print(pl)
@@ -216,13 +217,11 @@ plot_results <- function(calpuff_files,
       
       if("kml" %in% outputs) {
         contP <- spTransform(contP_UTM,CRS(proj4string(grids$gridLL)))
-        outL <- paste0(gsub("\n"," ",calpuff_files[file,"titletxt"]),filename_suffix)
-        
         
         colorRampPalette(c("steelblue","yellow","orange","red","darkred"))(length(lvls)) -> yorb
-        plotKML.env(colour_scale_numeric = yorb)
+        plotKML::plotKML.env(colour_scale_numeric = yorb)
         
-        png(file.path(dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
+        png(file.path(output_dir, "label.png"),width=1000,height=100,pointsize=16,bg = "transparent")
         
         decimals <- lvls %>% subset(.>0) %>% min %>%
           log10 %>% -. %>% ceiling %>% max(0)
@@ -240,8 +239,8 @@ plot_results <- function(calpuff_files,
                text.width = 1.2*max(strwidth(legendlvls[-length(legendlvls)])))
         dev.off()
         
-        kml_file <- file.path(dir, paste0(outL,".kml"))
-        kmz_file <- file.path(dir, paste0(outL,".kmz"))
+        kml_file <- file.path(output_dir, paste0(outL,filename_suffix,".kml"))
+        kmz_file <- file.path(output_dir, paste0(outL,filename_suffix,".kmz"))
         contP$colour_index <- rank(contP@data$max)
         kml_open(kml_file)
         kml_layer(obj=contP,
@@ -264,11 +263,11 @@ plot_results <- function(calpuff_files,
         kml_close(kml_file)
         
         zipping_function(kmz_file,
-                         c(kml_file, file.path(dir,c("factory.png","label.png"))))
+                         c(kml_file, file.path(output_dir,c("factory.png","label.png"))))
         
         if(!file.exists(kmz_file)) stop("creating kmz failed")
         file.remove(kml_file)
-        file.remove(file.path(dir,"label.png"))
+        file.remove(file.path(output_dir,"label.png"))
       }
     }
   }
@@ -280,10 +279,10 @@ plot_results <- function(calpuff_files,
     expPop2 %>% filter(min >= threshold) %>% group_by(name, titletxt, threshold) %>%
       summarise_at(c('pop', 'area'), sum, na.rm=T) -> pop_exceed
     
-    write_csv(expPop2, file.path(dir, paste0("expPop_new_format",filename_suffix,".csv")))
-    write_csv(pop_exceed, file.path(dir, paste0("threshold_exceedances",filename_suffix,".csv")))
+    write_csv(expPop2, file.path(output_dir, paste0("expPop_new_format",filename_suffix,".csv")))
+    write_csv(pop_exceed, file.path(output_dir, paste0("threshold_exceedances",filename_suffix,".csv")))
     
-    outF <- file(file.path(dir, paste0("expPop",filename_suffix,".csv")),"w")
+    outF <- file(file.path(output_dir, paste0("expPop",filename_suffix,".csv")),"w")
     
     for(n in names(expPop)) {
       writeLines(n,outF)

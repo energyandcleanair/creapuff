@@ -1,4 +1,4 @@
-sel <- dplyr::select
+
 
 
 get_ll <- function(loc){
@@ -87,7 +87,7 @@ textbuffer <- function(coords,width=5,steps=8) {
 raster2contourPolys <- function(r, levels = NULL) {
 
     ## set-up levels
-  if(levels != "auto") {
+  if(levels[1] != "auto") {
     levels <- sort(levels)
     plevels <- c(min(values(r), na.rm=TRUE), levels, max(values(r), na.rm=TRUE)) # pad with raster range
     llevels <- paste(plevels[-length(plevels)], plevels[-1], sep=" - ")
@@ -127,8 +127,8 @@ raster2contourPolys <- function(r, levels = NULL) {
   
   ## add buffer around lines and cut boundary polygon
   cat("Converting contour lines to polygons...\n")
-  bcl <- gBuffer(cl, width = 0.0001) # add small buffer so it cuts bounding poly
-  cp <- gDifference(b, bcl)
+  bcl <- rgeos::gBuffer(cl, width = 0.0001) # add small buffer so it cuts bounding poly
+  cp <- rgeos::gDifference(b, bcl)
   
   ## restructure and make polygon number the ID
   polys <- list()
@@ -146,13 +146,13 @@ raster2contourPolys <- function(r, levels = NULL) {
   l <- character(length(cp))
   for(j in seq_along(cp)) {
     p <- cp[cp$id==j,]
-    bp <- gBuffer(p, width = -max(res(r))) # use a negative buffer to obtain internal points
+    bp <- rgeos::gBuffer(p, width = -max(res(r))) # use a negative buffer to obtain internal points
     if(!is.null(bp)) {
       xy <- SpatialPoints(coordinates(bp@polygons[[1]]@Polygons[[1]]))[1]
       l[j] <- llevels[raster::extract(rc,xy)]
     }
     else {
-      xy <- coordinates(gCentroid(p)) # buffer will not be calculated for smaller polygons, so grab centroid
+      xy <- coordinates(rgeos::gCentroid(p)) # buffer will not be calculated for smaller polygons, so grab centroid
       l[j] <- llevels[raster::extract(rc,xy)]
     }
   }
@@ -174,7 +174,7 @@ raster2contourPolys <- function(r, levels = NULL) {
     cat("Defining holes...\n")
     spolys <- list()
     p <- cp[cp$level==llevels[1],] # add deepest layer
-    p <- gUnaryUnion(p)
+    p <- rgeos::gUnaryUnion(p)
     spolys[[1]] <- Polygons(p@polygons[[1]]@Polygons, ID=llevels[1])
     for(i in seq(length(llevels)-1)) {
       p1 <- cp[cp$level==llevels[i+1],] # upper layer
@@ -192,10 +192,10 @@ raster2contourPolys <- function(r, levels = NULL) {
       holes <- xy$id[which(!is.na(holes))]
       if(length(holes)>0) {
         p2 <- p2[p2$id %in% holes,] # keep the polygons over the shallower polygon
-        p1 <- gUnaryUnion(p1) # simplify each group of polygons
-        p2 <- gUnaryUnion(p2)
-        p <- gDifference(p1, p2) # cut holes in p1
-      } else { p <- gUnaryUnion(p1) }
+        p1 <- rgeos::gUnaryUnion(p1) # simplify each group of polygons
+        p2 <- rgeos::gUnaryUnion(p2)
+        p <- rgeos::gDifference(p1, p2) # cut holes in p1
+      } else { p <- rgeos::gUnaryUnion(p1) }
       spolys[[i+1]] <- Polygons(p@polygons[[1]]@Polygons, ID=llevels[i+1]) # add level
     }
   }
@@ -326,7 +326,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   
   calpuff_files <- data.frame(path = files, name=basename(files), scale = 1,
                               stringsAsFactors = F) %>%
-    separate(name,c("X1","species","hr","type","scenario"), "_", remove=F) %>% sel(-X1)
+    separate(name,c("X1","species","hr","type","scenario"), "_", remove=F) %>% dplyr::select(-X1)
   calpuff_files$type[calpuff_files$type=="conc"] <- "concentration"
   calpuff_files$unit <- "ug/m3"
   calpuff_files[grep("tflx",calpuff_files$name),"type"] <- "deposition"
