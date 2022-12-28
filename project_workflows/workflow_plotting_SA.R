@@ -2,15 +2,22 @@
 # remotes::install_github("energyandcleanair/creapuff", ref="main", dependencies=T, update=T)
 # devtools::reload(pkgload::inst("creapuff"))
 library(creapuff) 
+require(raster)
+require(sf)
 require(tidyverse)
+require(magrittr)
+require(lubridate)
 library(readxl)
+list.files(path='R', full.names=T) %>% sapply(source)
 
 
 # Parameters ###################################################################
 # ============================= Project specific ===============================
-project_dir="I:/SouthAfrica"       # calpuff_external_data-2 persistent disk (project data)
+#project_dir="I:/SouthAfrica"       # calpuff_external_data-2 persistent disk (project data)
+project_dir="C:/Users/lauri/Desktop/My Drive/air pollution/TAPM/2017cases/SouthAfrica2022"
 input_dir <- file.path(project_dir,"calpuff_suite") # Where to read all CALPUFF generated files
 output_dir <- file.path(project_dir,"plots") ; if (!dir.exists(output_dir)) dir.create(output_dir) # Where to write all HIA files
+emissions_dir <- file.path(project_dir,"emissions")
 
 #load grid parameters
 calmet_result <- readRDS(file.path(input_dir,"calmet_result.RDS" ))
@@ -26,16 +33,17 @@ calpuff_files %>% make_tifs(grids = grids)
 
 # Select tif data 
 calpuff_files_all <- get_calpuff_files(ext=".tif", gasunit = 'ppb', dir=input_dir, hg_scaling=1e-3) %>% 
-  mutate(scenario_description = case_when(scenario=="lcpp"~'Lephalale IPP',
+  mutate(scenario_description = case_when(scenario=="lcppipp"~'Lephalale IPP',
                                           scenario=="lcppmine"~'Lephalale mine',
-                                          T~paste0(toupper(substr(scenario, 1, 1)), substr(scenario, 2, 1e6))))
+                                          T~paste0(toupper(substr(scenario, 1, 1)), substr(scenario, 2, 1e6)))) %>% 
+  filter(!grepl('mine', scenario) | grepl('pm|tsp|hg', species))
 
 calpuff_files_all %>% write_csv(file.path(input_dir, 'file_info.csv'))
 
 
 
 # ================================ General =====================================
-gis_dir <- "F:/gis"                         # The folder where we store general GIS data
+gis_dir <- "C:/Users/lauri/Desktop/My Drive/GIS"                         # The folder where we store general GIS data
 
 # creahia::set_env('gis_dir',"~/GIS/")
 # Sys.setenv(gis_dir="~/GIS/")
@@ -45,19 +53,20 @@ gis_dir <- "F:/gis"                         # The folder where we store general 
 
 
 # Plots ########################################################################
-grids <- get_grids_calpuff(calpuff_files_all)
 target_crs <- crs(grids$gridR)
 
+source('project_workflows/emissions_processing_SA.R')
 
-plants_all <- read_csv(file.path(emissions_dir, 'emissions inputs.csv')) %>% 
-  group_by(Plant) %>% summarise(across(c(Lat, Long), mean)) %>% 
-  to_spdf(crs="+proj=longlat +datum=WGS84") %>% spTransform(target_crs)
+point_sources %<>% spTransform(target_crs) %>% st_as_sf
 
 #function to select appropriate plants to include in each plot
-get_plants <- function(scen) {plants_all %>% subset(grepl(scen, Plant, ignore.case = T) | scen=='krsteel')}
+get_plants <- function(scen) {
+  point_sources %>% filter(grepl('Lephalale', plant) == grepl('lcpp', scen) %>% 
+                             ) 
+}
 
 
-for(run in unique(calpuff_files_all$scenario)) {
+for(run in c('lcppmine', 'lcppipp')) { #'Eskom', 
   
   
   #function to zip files in case system standard function doesn't work
@@ -75,23 +84,21 @@ for(run in unique(calpuff_files_all$scenario)) {
   plot_bb <- plants %>% extent %>% magrittr::add(plotting_square_length_in_km)
   cities <- get_cities(plot_bb, grids)
   
-  cities$name %<>% recode(Yosu='Yeosu', Soul='Seoul', Pusan='Busan', Taejon='Daejeon', Kwangju='Gwangju', Cheju='Jeju')
-  
   calpuff_files <- calpuff_files_all %>% filter(scenario==run)
   
   #output plots and exposure results
   plot_results(calpuff_files,
-               scenario_names = calpuff_files$scenario_description[1],
-               dir=output_dir, 
-               plants=plants,
+               #scenario_names = calpuff_files$scenario_description[1],
+               output_dir=output_dir, 
+               plants=plants %>% rename(Source=plant),
                cities=cities,
                plot_km=c(plotting_square_length_in_km,plotting_square_length_in_km),
                colorkeybasis=NULL, # TRUE,  # NULL,
                # plant_names='Pollution from Coal-fired Power Plants in 2022',
                # plant_names=plants@data$Plants,
                zipping_function=zipping_function,
-               filename_suffix=paste0("_",scenario_prefix),
-               outputs=c("png", "expPop", "kml"), 
+               #filename_suffix=paste0("_",scenario_prefix),
+               outputs=c("png", "expPop", "kml", "cityconcs"), 
   )
   
 }
