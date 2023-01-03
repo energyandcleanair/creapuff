@@ -68,7 +68,8 @@ pu_templates <- list (# repartition = file.path(template_dir, "Mintia_postutilRe
                       repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),     # Mercury (Hg) in emission file 
                       deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
                       # total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))  # No mercury in emission file
-                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))     # Mercury (Hg) in emission file 
+                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"),
+                      sumruns=file.path(template_dir, "AfsinFun_postutil_sumruns.inp"))     # Mercury (Hg) in emission file 
 
 calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOutput_calpost.inp"), 
                           deposition = file.path(template_dir, "Mintia_depo_calpost.inp"))
@@ -116,6 +117,14 @@ if (emission_type == "constant") {
 
   # Produce unique ascii names with 8 characters
   emissions_data %<>% mutate(emission_names = plant %>% gsub(' ', '', .) %>% substr(1,7) %>% paste0(stack))
+  
+  #aggregate Camden's four stacks into one to speed things upW
+  emissions_data %<>% mutate(stack=ifelse(plant=='Camden', "1", stack),
+                            emission_names=ifelse(plant=='Camden', "Camden1", emission_names)) %>% 
+    group_by(plant, stack, AQCS, FGD, emission_names) %>% 
+    summarise(across(c(lat, lon, stack.height:velocity), mean),
+              across(Hg:SO2, sum))
+  
   if (emissions_data$emission_names %>% nchar %>% max > 8) stop("ERROR in plant-name length (too much plants with the same name?)")                        
 
   # Create polygons of grid boundaries  
@@ -123,31 +132,6 @@ if (emission_type == "constant") {
   
   # Exclude sources outside domain  
   emissions_data %<>% to_spdf %>% raster::crop(spTransform(dom_pols, raster::crs(.))) %>% '@'('data')
-}
-
-if (emission_type == "varying") {
-  # Find ptemarb.DAT files
-  emissions_file <- file.path(emissions_dir) %>% list.files(pattern='\\.DAT$', recursive = F, full.names=T) 
-  # Read plant names and positions
-  read_xlsx(input_xls) -> emissions_data 
-
-  # Emission names
-  emissions_data$Plants %>% gsub(' ', '', .) %>% make_srcnam -> emissions_data$emission_names
-  
-  # Ensure numeric values of lat and long  
-  emissions_data$Lat %<>% as.numeric()
-  emissions_data$Long %<>% as.numeric()
-  
-  # Create polygons of grid boundaries  
-  dom_pols = grids_to_domains(calmet_result$grids, target_crs)
-  
-  # Exclude sources outside domain  
-  emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('data')
-
-  # Test with less data
-  # emissions_data %<>% head(1)
-  # emissions_data %<>% tail(1)
-  # emissions_data <- rbind(emissions_data %>% head(1), emissions_data %>% tail(1))
 }
 
 
@@ -321,6 +305,9 @@ if (emission_type == "constant") {
 
 save.image(file.path(project_dir, 'calpuff.RData'))
 
+
+load(file.path(project_dir, 'calpuff.RData'))
+
 if (emission_type == "varying") {
   queue = unique(emissions_data$emission_names)
   for(run in queue) {
@@ -374,6 +361,8 @@ names(calpuff_results_all) <- runs
 names(inpfiles_created) <- runs
 
 queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '.CON') %>% file.exists() %>% '['(names(inpfiles_created), .)
+queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '_calpost.lst') %>% file.exists() %>% not %>% '['(names(inpfiles_created), .)
+queue <- runs[!grepl('LCPP', runs)]
 
 calpuff_results_all[['LCPP_mine']]$pm10fraction <- .45e-3
 
@@ -392,7 +381,7 @@ for(scen in queue) {
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
-    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'PPM25', 'SO4', 'NO3'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'PPM25', 'SO4', 'NO3', 'PM10'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
     cp_period_function = get_cp_period,
     run_discrete_receptors=T,
     run_gridded_receptors=F,
@@ -408,6 +397,8 @@ for(scen in queue) {
 }
 
 
+list.files(output_dir, pattern='grootvl.*\\.(csv|dat)', full.names = T) %>% 
+  (function(x) file.rename(x, gsub('grootvl', 'grootvlei', x)))
 
 #SUMRUNS for all Eskom stations
 
@@ -415,12 +406,15 @@ for(scen in queue) {
 pu_template_suffixes <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
 pu_sumruns_template = paste0(runs[1], pu_template_suffixes$repartition)
 pu_sumruns_depo_template=paste0(runs[1], pu_template_suffixes$depo)
-readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
-readLines(file.path(output_dir,pu_sumruns_depo_template_generic)) -> inp_depo
+readLines(file.path(output_dir,pu_sumruns_template)) -> inp
+readLines(file.path(output_dir,pu_sumruns_template)) -> inp_depo
   
 # Define current input-data list  
-sumfiles = paste0(toupper(names(inpfiles_created)), '.CON')  
-sumfiles_depo = append (paste0(toupper(names(inpfiles_created)), '.DRY'), paste0(toupper(names(inpfiles_created)), '.WET'))
+runs_to_sum=runs[!grepl('LCPP', runs)]
+scenario_prefix='eskom'
+
+sumfiles = paste0(toupper(runs_to_sum), '.CON')  
+sumfiles_depo = append (paste0(toupper(runs_to_sum), '.DRY'), paste0(toupper(runs_to_sum), '.WET'))
 
 # Fill generic inp files with current parameters and output-data names 
 inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters in a CALPUFF input file
