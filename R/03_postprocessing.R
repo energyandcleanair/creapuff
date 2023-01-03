@@ -16,7 +16,7 @@ get_package_file = function(files, package="creapuff") {
 
 runPostprocessing <- function(
   calpuff_inp,
-  run_name = names(calpuff_inp),
+  run_name = make_srcnam(names(calpuff_inp)),
   cp_run_name = run_name,
   files_met=NULL,
   output_dir=unique(files_met$dir),
