@@ -83,3 +83,8 @@ st_read(file.path(emissions_dir, 'Lephalale.kml')) %>%
 emis_lepha %>% filter(PM10>0) %>% mutate(emission_names=make_srcnam(source)) %>% inner_join(polys_mine, .) %>% 
   select(-matches('SO2|NOx|Hg')) -> emis_mine
 
+emis_ipp %>% mutate(plant='Lephalale IPP') %>%  
+  bind_rows(emissions_data) %>% 
+  group_by(plant) %>% summarise(across(c(lon, lat), mean)) %>% 
+  creahelpers::to_spdf() ->
+  point_sources
