@@ -373,7 +373,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"]               <- 15  # WHO-2021 [ug/m3]
   calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr > 7000,"threshold"]            <- 5   # WHO-2021
   calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"]                <- 45  # WHO-2021
-  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr > 7000,"threshold"]             <- 5   # WHO-2021
+  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr > 7000,"threshold"]             <- 15   # WHO-2021
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"]                  <- 100*46.01*0.0409 ## U.S. NAAQS at 1atm, 25°C (EPA)  # 98th percentile of 1-hour daily maximum concentrations, averaged over 3 years
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==24,"threshold"]                 <- 25  # WHO-2021
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr > 7000,"threshold"]              <- 10  # WHO-2021
