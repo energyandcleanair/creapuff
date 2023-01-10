@@ -21,6 +21,10 @@ read_xlsx(emisfile, skip=2, n_max=12, col_names = F) -> emis
 read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% select(1:10) %>% select(plant='Power Station', value=starts_with('kg/a'), AQCS='PM control') %>% 
   mutate(pollutant='Hg', FGD=grepl('FGD', AQCS)) -> hg
 
+read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% 
+  select(plant='Power Station', matches('reduction|FGC')) %>% 
+  set_names(make.names(names(.))) -> hg_control
+
 #ESP+wFGD / ESP / FF / none / CFBC
 
 read_xlsx(emisfile, skip=0, n_max=2, col_names = F) -> plantnames
@@ -63,8 +67,8 @@ emis %>%
 
 
 
-read_xlsx(file.path(emissions_dir, 'LCPP_Emissions.xlsx'), sheet='emissions for modeling') %>% 
-  select(-contains('unmitigated')) %>% filter(source != 'Total') %>% 
+read_xlsx(file.path(emissions_dir, 'LCPP_Emissions_v2.xlsx'), sheet='emissions for modeling') %>% 
+  select(-contains('unmitigated')) %>% 
   rename(PPM25=PM2.5, NOx_tpa=NOx, Hg_kgpa=Hg) %>% 
   mutate(PM10=PM10-PPM25, PM15=TSP-PM10) -> emis_lepha
 
@@ -76,7 +80,9 @@ coords_lepha %>% rename(emission_names = feature) %>%
   inner_join(emis_ipp) ->
   emis_ipp
 
-st_read(file.path(emissions_dir, 'Lephalale.kml')) %>% 
+c('Lephalale.kml', 'Grootgeluk.kml') %>% 
+  file.path(emissions_dir, .) %>% 
+  lapply(st_read) %>% bind_rows %>% 
   group_by(Name) %>% mutate(emission_names=Name %>% unique %>% make_srcnam()) %>% 
   rename(source=Name) -> polys_mine
 

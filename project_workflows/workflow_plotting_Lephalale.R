@@ -34,12 +34,38 @@ calpuff_files %>%
 
 # Select tif data 
 calpuff_files_all <- get_calpuff_files(ext=".tif", gasunit = 'ppb', dir=input_dir, hg_scaling=1e-3) %>% 
+  as_tibble() %>% 
   mutate(scenario_description = case_when(scenario=="lcppipp"~'Lephalale IPP',
                                           scenario=="lcppmine"~'Lephalale mine',
-                                          T~paste0(toupper(substr(scenario, 1, 1)), substr(scenario, 2, 1e6)))) %>% 
-  filter(!grepl('mine', scenario) | grepl('pm|tsp|hg', species))
+                                          T~scenario)) %>% 
+  filter(grepl('mn|pp|bg|lcpp', scenario), species %in% c('pm25', 'tpm10', 'so2', 'no2', 'hg'))
 
-calpuff_files_all %>% write_csv(file.path(input_dir, 'file_info.csv'))
+make_pop(grids) -> pop
+
+area_to_exclude <- file.path(emissions_dir, 'Lephalale infrastructure area.kml') %>% rgdal::readOGR()
+area_to_exclude_raster <- area_to_exclude %>% spTransform(crs(grids$gridR)) %>% rasterize(grids$gridR)
+
+calpuff_files_all %>% filter(!(scenario %in% c('bg', 'bgum'))) %>% 
+  group_by(name) %>% 
+  group_modify(function(df, group) {
+    message(group$name)
+    df$path %>% raster -> r
+    
+    bg <- r
+    bg[] <- 0
+    if(grepl('bg', df$scenario)) calpuff_files_all %>% filter(scenario=='bg', species==df$species, period==df$period) %>% 
+      use_series(path) %>% raster -> bg
+    r[is.na(area_to_exclude_raster)] <- 0
+    bg[is.na(area_to_exclude_raster)] <- 0
+    
+    source_contribution = values(r-bg)
+    maxconc_index = which(source_contribution == max(source_contribution))[1]
+    
+    tibble(max_conc_source=source_contribution[maxconc_index],
+           max_conc=values(r)[maxconc_index],
+           exp_pop=sum(pop[r>df$threshold]),
+           exp_area=sum(area(r)[r>df$threshold]))
+  }) -> conc_results
 
 
 
