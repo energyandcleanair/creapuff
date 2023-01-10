@@ -642,12 +642,11 @@ TZstring <- function(x) paste0("UTC",
                                stringr::str_pad(abs(x), 2, "left", "0"), "00")
 
 
-write_input <- function(file_template, file_out, params, ...) {
+write_input <- function(file_template, file_out, params, ..., subgroup=NULL) {
   readLines(file_template) -> pu.inp
   set_puff(pu.inp, params, ...) -> pu.inp
-  outcon <- file(file_out, "w")
-  writeLines(pu.inp, outcon)
-  close(outcon)
+  if(!is.null(subgroup)) add_subgroup_lines(pu.inp, lines=unlist(subgroup), subgroup=names(subgroup)) -> pu.inp
+  writeLines(pu.inp, file_out)
 }
 
 
@@ -900,9 +899,10 @@ get_plant_elev <- function(sources.sp, files_met, dir=unique(files_met$dir)) {
 
 add_subgroup_lines <- function(inp, lines, subgroup, skip_lines=NULL) {
   if(!grepl("Subgroup", subgroup)) subgroup %<>% paste0("Subgroup (",.,")")
-  header_ln = grep(subgroup,inp, fixed=T)
+  header_ln = which(inp==subgroup)
   if(is.null(skip_lines)) {
     end_ln = grep("^-{7,}$",inp) %>% subset(.>header_ln+1) %>% head(1)
+    if(length(end_ln)==0) end_ln=length(inp)
     ln=end_ln-2
   } else ln = header_ln + skip_lines + 1
   
