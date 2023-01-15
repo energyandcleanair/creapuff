@@ -18,8 +18,13 @@ emisfile=file.path(emissions_dir, 'Eskom Monthly Emissions April 21 -Mar 22.xlsx
 
 read_xlsx(emisfile, skip=2, n_max=12, col_names = F) -> emis
 
-read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% select(1:10) %>% select(plant='Power Station', value=starts_with('kg/a'), AQCS='PM control') %>% 
+read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% select(1:10) %>% 
+  select(plant='Power Station', value=starts_with('kg/a'), AQCS='PM control') %>% 
   mutate(pollutant='Hg', FGD=grepl('FGD', AQCS)) -> hg
+
+read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% 
+  select(plant='Power Station', matches('reduction|FGC')) %>% 
+  set_names(make.names(names(.))) -> hg_control
 
 #ESP+wFGD / ESP / FF / none / CFBC
 
