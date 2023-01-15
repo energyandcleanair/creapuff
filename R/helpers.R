@@ -1153,6 +1153,9 @@ read_calpost = function(csvfile) {
 }
 
 get_wdpa_for_grid = function(grids) {
+  old_s2_setting <- sf_use_s2()
+  sf_use_s2(F)
+  on.exit(sf_use_s2(old_s2_setting))
   grids$gridR %>% projectExtent(crs(rworldmap::countriesLow)) %>% extent %>% 
     magrittr::multiply_by(1.1) %>% as.matrix %>% creahelpers::get_wdpa() %>% 
     sp::spTransform(crs(grids$gridR))
