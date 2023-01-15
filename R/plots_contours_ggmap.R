@@ -72,8 +72,10 @@ plot_contours <- function(calpuff_files,
     }
     
     map_plot +
-      scale_x_continuous(limits=c(plot_bb_3857@xmin, plot_bb_3857@xmax), expand=expansion()) +
-      scale_y_continuous(limits=c(plot_bb_3857@ymin, plot_bb_3857@ymax), expand=expansion()) +
+      #scale_x_continuous(limits=c(plot_bb_3857@xmin, plot_bb_3857@xmax), expand=expansion()) +
+      #scale_y_continuous(limits=c(plot_bb_3857@ymin, plot_bb_3857@ymax), expand=expansion()) +
+      coord_sf(xlim=c(plot_bb_3857@xmin, plot_bb_3857@xmax),
+               ylim=c(plot_bb_3857@ymin, plot_bb_3857@ymax)) +
       theme(panel.border = element_rect(fill=NA, color='black')) +
       labs(title=str_wrap(titletxt, 45), x='', y='') +
       scale_color_manual(values=colRamp, name='µg/m3') +
