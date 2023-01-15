@@ -68,8 +68,8 @@ emis %>%
 
 
 
-read_xlsx(file.path(emissions_dir, 'LCPP_Emissions.xlsx'), sheet='emissions for modeling') %>% 
-  select(-contains('unmitigated')) %>% filter(source != 'Total') %>% 
+read_xlsx(file.path(emissions_dir, 'LCPP_Emissions_v2.xlsx'), sheet='emissions for modeling') %>% 
+  select(-contains('unmitigated')) %>% 
   rename(PPM25=PM2.5, NOx_tpa=NOx, Hg_kgpa=Hg) %>% 
   mutate(PM10=PM10-PPM25, PM15=TSP-PM10) -> emis_lepha
 
@@ -81,7 +81,9 @@ coords_lepha %>% rename(emission_names = feature) %>%
   inner_join(emis_ipp) ->
   emis_ipp
 
-st_read(file.path(emissions_dir, 'Lephalale.kml')) %>% 
+c('Lephalale.kml', 'Grootgeluk.kml') %>% 
+  file.path(emissions_dir, .) %>% 
+  lapply(st_read) %>% bind_rows %>% 
   group_by(Name) %>% mutate(emission_names=Name %>% unique %>% make_srcnam()) %>% 
   rename(source=Name) -> polys_mine
 

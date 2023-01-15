@@ -14,15 +14,15 @@ library(pbapply)
 require(creahelpers)
 require(ncdf4)
 
-# library(creapuff)
+library(creapuff)
 
 #development
-source('R/env.R')
-source('R/helpers.R')
-source('R/01_calmet.R')
-source('R/02_calpuff_corrected.R')
-source('R/03_postprocessing.R')
-source('R/plots.R')
+#source('R/env.R')
+#source('R/helpers.R')
+#source('R/01_calmet.R')
+#source('R/02_calpuff_corrected.R')
+#source('R/03_postprocessing.R')
+#source('R/plots.R')
 
 
 
@@ -68,7 +68,8 @@ pu_templates <- list (# repartition = file.path(template_dir, "Mintia_postutilRe
                       repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),     # Mercury (Hg) in emission file 
                       deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
                       # total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))  # No mercury in emission file
-                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))     # Mercury (Hg) in emission file 
+                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"),
+                      sumruns=file.path(template_dir, "AfsinFun_postutil_sumruns.inp"))     # Mercury (Hg) in emission file 
 
 calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOutput_calpost.inp"), 
                           deposition = file.path(template_dir, "Mintia_depo_calpost.inp"))
@@ -116,6 +117,14 @@ if (emission_type == "constant") {
 
   # Produce unique ascii names with 8 characters
   emissions_data %<>% mutate(emission_names = plant %>% gsub(' ', '', .) %>% substr(1,7) %>% paste0(stack))
+  
+  #aggregate Camden's four stacks into one to speed things upW
+  emissions_data %<>% mutate(stack=ifelse(plant=='Camden', "1", stack),
+                            emission_names=ifelse(plant=='Camden', "Camden1", emission_names)) %>% 
+    group_by(plant, stack, AQCS, FGD, emission_names) %>% 
+    summarise(across(c(lat, lon, stack.height:velocity), mean),
+              across(Hg:SO2, sum))
+  
   if (emissions_data$emission_names %>% nchar %>% max > 8) stop("ERROR in plant-name length (too much plants with the same name?)")                        
 
   # Create polygons of grid boundaries  
@@ -123,31 +132,6 @@ if (emission_type == "constant") {
   
   # Exclude sources outside domain  
   emissions_data %<>% to_spdf %>% raster::crop(spTransform(dom_pols, raster::crs(.))) %>% '@'('data')
-}
-
-if (emission_type == "varying") {
-  # Find ptemarb.DAT files
-  emissions_file <- file.path(emissions_dir) %>% list.files(pattern='\\.DAT$', recursive = F, full.names=T) 
-  # Read plant names and positions
-  read_xlsx(input_xls) -> emissions_data 
-
-  # Emission names
-  emissions_data$Plants %>% gsub(' ', '', .) %>% make_srcnam -> emissions_data$emission_names
-  
-  # Ensure numeric values of lat and long  
-  emissions_data$Lat %<>% as.numeric()
-  emissions_data$Long %<>% as.numeric()
-  
-  # Create polygons of grid boundaries  
-  dom_pols = grids_to_domains(calmet_result$grids, target_crs)
-  
-  # Exclude sources outside domain  
-  emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('data')
-
-  # Test with less data
-  # emissions_data %<>% head(1)
-  # emissions_data %<>% tail(1)
-  # emissions_data <- rbind(emissions_data %>% head(1), emissions_data %>% tail(1))
 }
 
 
@@ -277,7 +261,7 @@ if (emission_type == "constant") {
     #emissions_data = emis_ipp,               # For constant emission data
     #source_names = emis_ipp$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
     #FGD = T,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
-    area_sources=emis_mine,
+    area_sources=emis_mine %>% filter(!grepl('Groot', emission_names)),
     receptors = receptors,                             # Optional. If not set: full domain grid
     o3dat = o3dat,                                     # Optional. If not set: no surface data
     species_configuration = "so2_nox_pm_hg",           # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
@@ -290,7 +274,25 @@ if (emission_type == "constant") {
     calpuff_template = calpuff_template,
   )
   
-  queue %<>% c('LCPP_IPP', 'LCPP_mine') %>% unique
+  #Grootegeluk mine
+  runCalpuff(
+    #emissions_data = emis_ipp,               # For constant emission data
+    #source_names = emis_ipp$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
+    #FGD = T,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
+    area_sources=emis_mine %>% filter(grepl('Groot', emission_names)),
+    receptors = receptors,                             # Optional. If not set: full domain grid
+    o3dat = o3dat,                                     # Optional. If not set: no surface data
+    species_configuration = "so2_nox_pm_hg",           # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
+    bgconcs = bgconcs,                                 # Optional. If not set: std values
+    run_name = 'Grootge',   
+    output_dir = output_dir,
+    params_allgrids = calmet_result$params,
+    gis_dir = gis_dir,
+    calpuff_exe = calpuff_exe,
+    calpuff_template = calpuff_template,
+  )
+  
+  queue %<>% c('LCPP_IPP', 'LCPP_mine', 'Grootge') %>% unique
   
   # Execute each CALPUFF bat file
   for(run in queue) {
@@ -321,48 +323,9 @@ if (emission_type == "constant") {
 
 save.image(file.path(project_dir, 'calpuff.RData'))
 
-if (emission_type == "varying") {
-  queue = unique(emissions_data$emission_names)
-  for(run in queue) {
-    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    # run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
-    run_name <- emissions_data_run$emission_names 
-    NPT2 <- emissions_data_run$N_sources  # Number of emission sources per file
-    print(paste0("CALPUFF run name: ", run_name, ", n_sources: ", NPT2))
-    
-    calpuff_result <- creapuff::runCalpuff(
-      # emissions_data = emissions_data,     # For constant emissions 
-      # source_names = source_names,         # Optional. If not set: read from emissions_data (if not present, set automatically)
-      # FGD = "T",                           # Optional. If not set: read from emissions_data (if not present, an error occurs)
-      receptors=receptors,                   # Optional. If not set: full domain grid
-      o3dat=o3dat,                           # Optional. If not set: no surface data
-      bgconcs=bgconcs,                       # Optional. If not set: std values
-      species_configuration = "so2_nox_pm_hg",  # Two possible values: "so2_nox_pm", "so2_nox_pm_hg"
-      addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
-                       PTDAT = emissions_data_run$Path,
-                       NPT2 = NPT2),
-      run_name=run_name,
-      output_dir = output_dir,
-      params_allgrids = calmet_result$params,
-      gis_dir = gis_dir,
-      calpuff_exe = calpuff_exe,
-      calpuff_template = calpuff_template
-    )
-  } 
-  
-  # Execute each CALPUFF bat file
-  for(run in queue) {
-    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- emissions_data_run$emission_names
 
-    bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file))
-    # Sys.sleep(10)
-  }
-}
+load(file.path(project_dir, 'calpuff.RData'))
 
-
-browser()
 
 
 # POST-PROCESSING ##############################################################
@@ -374,6 +337,8 @@ names(calpuff_results_all) <- runs
 names(inpfiles_created) <- runs
 
 queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '.CON') %>% file.exists() %>% '['(names(inpfiles_created), .)
+queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '_calpost.lst') %>% file.exists() %>% not %>% '['(names(inpfiles_created), .)
+queue <- runs[!grepl('LCPP', runs)]
 
 calpuff_results_all[['LCPP_mine']]$pm10fraction <- .45e-3
 
@@ -392,7 +357,7 @@ for(scen in queue) {
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
-    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'PPM25', 'SO4', 'NO3'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'PPM25', 'SO4', 'NO3', 'PM10'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
     cp_period_function = get_cp_period,
     run_discrete_receptors=T,
     run_gridded_receptors=F,
@@ -408,107 +373,154 @@ for(scen in queue) {
 }
 
 
+list.files(output_dir, pattern='grootvl.*\\.(csv|dat)', full.names = T) %>% 
+  (function(x) file.rename(x, gsub('grootvl', 'grootvlei', x)))
 
-#SUMRUNS for all Eskom stations
+#postutil scaling for Lephalale+Grootegeluk+Medupi+Matimba max emissions
+emis_lepha %>% filter(grepl('IPP|Groot|Lepha', source)) %>% 
+  mutate(mitigated = !grepl('unmitigated', source),
+         source = source %>% gsub(' .*', '', .)) %>% 
+  group_by(source) %>% summarise(across(c(pm=TSP, so2=SO2, nox=NOx_tpa, hg=Hg_kgpa), ~.x[!mitigated]/.x[mitigated])) ->
+  scaling_lepha
+emissions_data %>% filter(plant %in% c('Medupi', 'Matimba')) %>% group_by(plant) %>% summarise(across(Hg:SO2, sum))
 
-# Read sample inp files
-pu_template_suffixes <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
-pu_sumruns_template = paste0(runs[1], pu_template_suffixes$repartition)
-pu_sumruns_depo_template=paste0(runs[1], pu_template_suffixes$depo)
-readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
-readLines(file.path(output_dir,pu_sumruns_depo_template_generic)) -> inp_depo
-  
-# Define current input-data list  
-sumfiles = paste0(toupper(names(inpfiles_created)), '.CON')  
-sumfiles_depo = append (paste0(toupper(names(inpfiles_created)), '.DRY'), paste0(toupper(names(inpfiles_created)), '.WET'))
+scaling <- list(mine_unmitigated=scaling_lepha %>% filter(source=='Lephalale') %>% select(pm), 
+                background_unmitigated=list(Grootge=scaling_lepha %>% filter(source=='Grootgeluk') %>% select(pm),
+                                            Medupi=tibble(pm=250),
+                                            Matimba=tibble(pm=50)))
 
-# Fill generic inp files with current parameters and output-data names 
-inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters in a CALPUFF input file
-                       MNITRATE  =  0,             # Recompute the HNO3/NO3 partition for concentrations, for all sources combined
-                       UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.LST")),  # Output LST file
-                       UTLDAT = file.path(output_dir,paste0(scenario_prefix,".CON"))))                  # Output data file, for concentrations (.CON)
-inp_depo %<>% set_puff(list(NFILES = length(sumfiles_depo),  # Function to set parameters in a CALPUFF input file
-                            UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_Depo.LST")),            # Output LST file. Filename-format as ScAll_POSTUTIL_Depo.LST
-                            UTLDAT = file.path(output_dir,paste0(scenario_prefix,"_Depo.FLX"))))                    # Output data file, for fluxes (.FLX). Filename-format as ScAll_Depo.FLX
+scaling$mine_pp_unmitigated=list(LCPP_mine=scaling$mine_unmitigated,
+                                 LCPP_IPP=scaling_lepha %>% filter(source=='IPP') %>% select(-source))
 
-# Fill the corresponding lines for with current input-data list (CALPUFF outputs)
-con_line <- grep("!MODDAT=", gsub(" ", "", inp))  # Looking for input-data position index 
-inp <- c(inp[1:(con_line-1)],
-         paste("   ",1:length(sumfiles),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles),"! !END!"),  # For concentrations (.CON)
-         inp[-1:-con_line])
-con_line_depo <- grep("!MODDAT=", gsub(" ", "", inp_depo))  # Looking for input-data position index
-inp_depo <- c(inp_depo[1:(con_line_depo-1)],
-              paste("   ",1:length(sumfiles_depo),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles_depo),"! !END!"),  # For deposition (.DRY, .WET)
-              inp_depo[-1:-con_line_depo[2]])
-
-# Write the _POSTUTIL_SUMRUNS.INP and  _postutil_depo.inp files
-pu_sumruns_template_all <- file.path(output_dir, paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.INP"))
-writeLines(inp, pu_sumruns_template_all) 
-pu_sumruns_depo_template_all <- file.path(output_dir, paste0(scenario_prefix,"_postutil_depo.inp"))  # Filename-format for PU bat files (ex: pu_ScAll.bat) 
-writeLines(inp_depo, pu_sumruns_depo_template_all) 
-
-# Create the _SUMRUNS.bat bat file
-pu_sumruns_bat <- file.path(output_dir, paste0("pu_",scenario_prefix,"_SUMRUNS.bat"))
-writeLines(c(paste("cd", output_dir),
-             paste0(pu_exe, " ", normalizePath(pu_sumruns_template_all)),
-             "pause"), 
-           pu_sumruns_bat)  # shell.exec(normalizePath(pu_sumruns_bat)) 
-
-
-# -------------
-#   Subgroup (2d)
-# -------------
-#   
-#   Each species in NSCALED CALPUFF data files may be scaled before being
-# processed (e.g., to change the emission rate for all sources modeled
-#            in the run that produced a data file).  For each file, identify the
-# file name and then provide the name(s) of the scaled species and the
-# corresponding scaling factors (A,B where x' = Ax+B).
-# 
-#                A(Default=1.0)      B(Default=0.0)
-#                --------------      --------------
-# 
-# * MODDAT =NOFILES.DAT    *
-# *     SO2  =      1.1,                 0.0   *
-# *     SO4  =      1.5,                 0.0   *
-# *    HNO3  =      0.8,                 0.0   *
-# *     NO3  =      0.1,                 0.0   *
-# *END*
+#mn&pp mitigated
+#unmitigated
+#background = medupi, matimba, grootegeluk
+#with background = background + mn&pp
+#bg and wbg unmitigated
+run_queue <- list(list(run_name_out='mine_unmitigated',
+                       run_name='LCPP_mine',
+                       cp_run_name = 'mnum',
+                       emissions_scaling = scaling$mine_unmitigated),
+                  list(run_name_out='mine_IPP_unmitigated',
+                       run_name=c('LCPP_mine','LCPP_IPP'),
+                       cp_run_name = 'mnppum',
+                       emissions_scaling = scaling$mine_pp_unmitigated),
+                  list(run_name_out='mine_IPP',
+                       run_name=c('LCPP_mine','LCPP_IPP'),
+                       cp_run_name = 'mnpp',
+                       emissions_scaling = NULL),
+                  list(run_name_out='background',
+                       run_name=c('Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'bg',
+                       emissions_scaling = NULL),
+                  list(run_name_out='background_unmitigated',
+                       run_name=c('Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'bgum',
+                       emissions_scaling = scaling$background_unmitigated),
+                  list(run_name_out='mine_IPP_background',
+                       run_name=c('LCPP_mine', 'LCPP_IPP', 'Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'mnppbg',
+                       emissions_scaling = NULL),
+                  list(run_name_out='mine_background',
+                       run_name=c('LCPP_mine', 'Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'mnbg',
+                       emissions_scaling = NULL),
+                  list(run_name_out='mine_IPP_background_unmitigated',
+                       run_name=c('LCPP_mine', 'LCPP_IPP', 'Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'mnppumbg',
+                       emissions_scaling = scaling$mine_pp_unmitigated),
+                  list(run_name_out='mine_background_unmitigated',
+                       run_name=c('LCPP_mine', 'Medupi', 'Matimba', 'Grootge'),
+                       cp_run_name = 'mnumbg',
+                       emissions_scaling = list(LCPP_mine=scaling$mine_unmitigated)))
 
 
-# 2. Define PU and CP INP and bat files, for summed-up concentrations   
-name_generic=first_cluster_name  
+#already modeled
+# LCPP_IPP~power plant
+# LCPPmine~mine
 
-# PU INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
-file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_postutil'))) -> pu_files_generic
-pu_files_generic <- pu_files_generic[c(grep("Repartition", pu_files_generic),grep("PM10", pu_files_generic))]  # No need for _postutil_depo.inp, already created
-for(f in pu_files_generic) {
-  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%    
-    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
-}
+#to model
+# mine unmitigated
+# mine+power plant
+# mine+power plant unmitigated
+# background
+# mine w background
+# mine+power plant w background
+# mine unmitigated w background
+# mine+power plant unmitigated w background
 
-# CP INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
-file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_.*calpost'))) -> cp_files_generic
-for(f in cp_files_generic) {
-  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
-    gsub(first_cluster_name, scenario_prefix, .) %>% 
-    writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
-}
+                                    
+run_queue %>% 
+  lapply(function(x) {
+    message(x$run_name_out)
+    runPostprocessing(
+      calpuff_inp=inpfiles_created['LCPP_mine'],
+      run_name = x$run_name,
+      run_name_out = x$run_name_out,
+      cp_run_name = x$cp_run_name,
+      output_dir=output_dir,
+      files_met = out_files,
+      pm10fraction=calpuff_results_all[['LCPP_IPP']]$pm10fraction,
+      METRUN = 0,  
+      nper = NULL,
+      pu_start_hour = NULL,
+      cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+      cp_period_function = get_cp_period,
+      run_discrete_receptors=T,
+      run_gridded_receptors=F,
+      run_concentrations=T,
+      run_deposition=T,
+      run_timeseries = F,
+      run_hourly = c('SO2'), #c('PM25', 'NO2', 'SO2'),
+      emissions_scaling = x$emissions_scaling,
+      run_pu=F,
+      run_calpost=T,
+      pu_templates = pu_templates,
+      calpost_templates=calpost_templates
+    )
+  })
 
-# Bat files 
-file.path(output_dir,list.files(output_dir, pattern=paste0(first_cluster_name,'\\.bat'))) -> bat_files_generic
-for(f in bat_files_generic) {
-  f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
-    gsub(first_cluster_name, scenario_prefix, .) %>% 
-    writeLines(file.path (output_dir, gsub(paste0(first_cluster_name), scenario_prefix, basename(f))))
-}
-pu_bat <- file.path(output_dir, paste0("pu_", scenario_prefix, ".bat"))       # shell.exec(normalizePath(pu_bat)) 
-cp_bat <- file.path(output_dir, paste0("calpost_", scenario_prefix, ".bat"))  # shell.exec(normalizePath(cp_bat)) 
 
-# Remove generic INP and bat files
-file.remove(pu_files_generic)
-file.remove(cp_files_generic)
-file.remove(bat_files_generic)
+
+
+
+
+#SUMRUNS for Lephalale+Grootegeluk+Medupi+Matimba, and without Lephalale
+runs_to_sum=c('LCPP_mine', 'LCPP_IPP', 'Medupi', 'Matimba', 'Grootge')
+run_to_create='LCPP_wbg'
+
+runPostprocessing(
+  calpuff_inp=inpfiles_created[runs_to_sum[1]],
+  run_name=runs_to_sum,
+  run_name_out = 'LCPP_with_background',
+  cp_run_name = 'LCPPwbg',
+  output_dir=output_dir,
+  files_met = out_files,
+  pm10fraction=calpuff_results_all[[scen]]$pm10fraction,
+  METRUN = 0,  
+  nper = NULL,
+  pu_start_hour = NULL,
+  cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+  cp_period_function = get_cp_period,
+  run_discrete_receptors=T,
+  run_gridded_receptors=F,
+  run_concentrations=T,
+  run_deposition=T,
+  run_timeseries = F,
+  run_hourly = c(), #c('PM25', 'NO2', 'SO2'),
+  #emissions_scaling = list(pm=scaling_lepha$pm[scaling_lepha$source=='Lephalale']),
+  run_pu=F,
+  run_calpost=F,
+  pu_templates = pu_templates,
+  calpost_templates=calpost_templates
+)
+
+
+
+
+
+
+
 
 
 # 3. Run all bat files, in sequence

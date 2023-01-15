@@ -1,20 +1,20 @@
 # Set up the environment
 # remotes::install_github("energyandcleanair/creapuff", ref="main", dependencies=T, update=T)
 # devtools::reload(pkgload::inst("creapuff"))
-library(creapuff) 
 require(raster)
 require(sf)
 require(tidyverse)
 require(magrittr)
 require(lubridate)
 library(readxl)
-list.files(path='R', full.names=T) %>% sapply(source)
+library(creapuff) 
+#list.files(path='R', full.names=T) %>% sapply(source)
 
 
 # Parameters ###################################################################
 # ============================= Project specific ===============================
-#project_dir="I:/SouthAfrica"       # calpuff_external_data-2 persistent disk (project data)
-project_dir="C:/Users/lauri/Desktop/My Drive/air pollution/TAPM/2017cases/SouthAfrica2022"
+project_dir="I:/SouthAfrica"       # calpuff_external_data-2 persistent disk (project data)
+#project_dir="C:/Users/lauri/Desktop/My Drive/air pollution/TAPM/2017cases/SouthAfrica2022"
 input_dir <- file.path(project_dir,"calpuff_suite") # Where to read all CALPUFF generated files
 output_dir <- file.path(project_dir,"plots") ; if (!dir.exists(output_dir)) dir.create(output_dir) # Where to write all HIA files
 emissions_dir <- file.path(project_dir,"emissions")
@@ -29,7 +29,8 @@ calpuff_files <- get_calpuff_files(ext=".csv", gasunit = 'ppb', dir=input_dir, h
 grids = get_grids_calpuff(calpuff_files, UTMZ, UTMH, map_res=1)
 
 #make tifs
-calpuff_files %>% make_tifs(grids = grids)
+calpuff_files %>% 
+  filter(grepl('mn|pp|bg|lcpp', scenario), !is.na(threshold)) %>% make_tifs(grids = grids)
 
 # Select tif data 
 calpuff_files_all <- get_calpuff_files(ext=".tif", gasunit = 'ppb', dir=input_dir, hg_scaling=1e-3) %>% 
@@ -43,7 +44,8 @@ calpuff_files_all %>% write_csv(file.path(input_dir, 'file_info.csv'))
 
 
 # ================================ General =====================================
-gis_dir <- "C:/Users/lauri/Desktop/My Drive/GIS"                         # The folder where we store general GIS data
+#gis_dir <- "C:/Users/lauri/Desktop/My Drive/GIS"                         # The folder where we store general GIS data
+gis_dir <- "F:/GIS"                         # The folder where we store general GIS data
 
 # creahia::set_env('gis_dir',"~/GIS/")
 # Sys.setenv(gis_dir="~/GIS/")
