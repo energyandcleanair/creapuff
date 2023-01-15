@@ -1,7 +1,7 @@
 Package: creapuff
 Type: Package
 Title: CREAPUFF: R package to work with CALMET and CALPUFF
-Version: 0.2
+Version: 0.2.1
 Authors@R: c(
     person("Hubert", "Thieriot", email = "hubert@energyandcleanair.org", role = c("cre","aut")),
     person("Lauri", "Myllyvirta", email = "lauri@energyandcleanair.org", role = c("aut")),

@@ -373,7 +373,7 @@ get_calpuff_files <- function(ext=".csv", gasunit="ug", dir=".", hg_scaling=1) {
   calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr==24,"threshold"]               <- 15  # WHO-2021 [ug/m3]
   calpuff_files[calpuff_files$speciesName=="PM2.5" & calpuff_files$hr > 7000,"threshold"]            <- 5   # WHO-2021
   calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr==24,"threshold"]                <- 45  # WHO-2021
-  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr > 7000,"threshold"]             <- 5   # WHO-2021
+  calpuff_files[calpuff_files$speciesName=="PM10" & calpuff_files$hr > 7000,"threshold"]             <- 15   # WHO-2021
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==1,"threshold"]                  <- 100*46.01*0.0409 ## U.S. NAAQS at 1atm, 25°C (EPA)  # 98th percentile of 1-hour daily maximum concentrations, averaged over 3 years
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr==24,"threshold"]                 <- 25  # WHO-2021
   calpuff_files[calpuff_files$speciesName=="NO2" & calpuff_files$hr > 7000,"threshold"]              <- 10  # WHO-2021
@@ -642,12 +642,11 @@ TZstring <- function(x) paste0("UTC",
                                stringr::str_pad(abs(x), 2, "left", "0"), "00")
 
 
-write_input <- function(file_template, file_out, params, ...) {
+write_input <- function(file_template, file_out, params, ..., subgroup=NULL) {
   readLines(file_template) -> pu.inp
   set_puff(pu.inp, params, ...) -> pu.inp
-  outcon <- file(file_out, "w")
-  writeLines(pu.inp, outcon)
-  close(outcon)
+  if(!is.null(subgroup)) add_subgroup_lines(pu.inp, lines=unlist(subgroup), subgroup=names(subgroup)) -> pu.inp
+  writeLines(pu.inp, file_out)
 }
 
 
@@ -900,9 +899,10 @@ get_plant_elev <- function(sources.sp, files_met, dir=unique(files_met$dir)) {
 
 add_subgroup_lines <- function(inp, lines, subgroup, skip_lines=NULL) {
   if(!grepl("Subgroup", subgroup)) subgroup %<>% paste0("Subgroup (",.,")")
-  header_ln = grep(subgroup,inp, fixed=T)
+  header_ln = which(inp==subgroup)
   if(is.null(skip_lines)) {
     end_ln = grep("^-{7,}$",inp) %>% subset(.>header_ln+1) %>% head(1)
+    if(length(end_ln)==0) end_ln=length(inp)
     ln=end_ln-2
   } else ln = header_ln + skip_lines + 1
   

@@ -17,7 +17,8 @@ get_package_file = function(files, package="creapuff") {
 runPostprocessing <- function(
   calpuff_inp,
   run_name = names(calpuff_inp),
-  cp_run_name = run_name,
+  run_name_out = run_name, #if run_name includes multiple runs to be summed up, this is the output run name
+  cp_run_name = make_srcnam(run_name_out),
   files_met=NULL,
   output_dir=unique(files_met$dir),
   pm10fraction,
@@ -32,6 +33,7 @@ runPostprocessing <- function(
   run_deposition=T,
   run_timeseries = T,
   run_hourly = c('PM25', 'NO2', 'SO2'),
+  emissions_scaling=NULL,
   run_pu=F,
   run_calpost=F,
   pu_templates = get_package_file(list(sumruns="AfsinFut_postutil_sumruns.inp",
@@ -44,10 +46,227 @@ runPostprocessing <- function(
   calpost_exe = "C:/Calpuff/CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe"
   ){
   
+  if(nchar(cp_run_name)>8) stop('cp_run_name is too long, the limit is 8 characters') 
+  
   # Generate POSTUTIL and CALPOST .inp files
   pu.inp.out <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
   cp.inp.out <- calpost_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
 
+  paramlist <- read_postutil_params_from_calpuff_inp(calpuff_inp, pu_start_hour=pu_start_hour, nper=nper)
+  params <- paramlist$params
+  
+  if(is.null(output_dir)) output_dir = paramlist$calpuff_output_dir
+  message(paste("output dir:", output_dir))
+  
+  if(is.null(nper)) nper <- paramlist$nper
+  
+  if(length(run_name)==1) { conF <- params$val[params$name=='MODDAT']
+  } else { conF <- file.path(output_dir, paste0(run_name, '.CON')) }
+  
+  names(conF) <- run_name
+
+  params %<>% dplyr::select(-cpuname) %>% filter(!grepl("^IE", name))
+  
+  # Set params determined by program
+  params[nrow(params)+1,] <- c('UTLLST', file.path(output_dir, paste0(run_name_out, '_POSTUTIL_REPART.LST')))
+  params[nrow(params)+1,] <- c('UTLDAT', file.path(output_dir, paste0(run_name_out, '_repart.CON')))
+  
+  params %>% filter(name!='ABTZ', name != 'MODDAT') -> pu_params
+  
+  nscaled=0
+  if(!is.null(emissions_scaling)) {
+    nscaled=length(emissions_scaling)
+    if(!all(names(emissions_scaling) %in% run_name)) {
+      if(!all(names(emissions_scaling) %in% c('so2', 'nox', 'pm', 'hg'))) stop('emissions_scaling names must match with run_names')
+      nscaled=1
+      emissions_scaling <- list()
+      emissions_scaling[[run_name]] <- emissions_scaling
+    }
+    
+    names(emissions_scaling) %>% 
+      lapply(function(run) {
+        make_emissions_scaling_lines(conF[run_name==run], emissions_scaling[[run]])
+      }) %>% unlist ->
+      emissions_scaling_lines
+    
+    emissions_scaling = list('2d'=emissions_scaling_lines)
+    message('---adding emissions scaling---')
+    message(emissions_scaling_lines)
+  }
+  
+  if(run_concentrations) {
+    
+    if(!is.null(files_met))
+      pu_params[pu_params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(METDAT) %>%
+        head(1)
+    
+    repart_params = bind_rows(tibble(name='MODDAT', val=conF),
+                              tibble(name='NFILES', val=as.character(length(run_name))),
+                              tibble(name='NSCALED', val=as.character(nscaled)))
+    
+    # Write repartitioning INP file
+    write_input(pu_templates$repartition, 
+                file.path(output_dir, paste0(run_name_out, pu.inp.out$repartition)),
+                bind_rows(pu_params, repart_params),
+                subgroup=emissions_scaling)
+    
+    # Write_input file to calculate total PM
+    pu_params %<>% bind_rows(tibble(name='MODDAT', val=pu_params$val[pu_params$name == 'UTLDAT'])) 
+    pu_params[pu_params$name == 'UTLDAT', 'val'] %<>% gsub("repart", "TotalPM", .)
+    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
+    pu_params[!(pu_params$name %in% c('BCKNH3', 'UTLMET')), ] -> pu_params
+    
+    #save file name for input to calpost
+    totalpm.con <- pu_params[pu_params$name == 'UTLDAT', 'val']
+    
+    pu_params %>% bind_rows(tibble(name='ASPECO', val=cp_species)) -> totalPM_params
+    totalPM_params %<>% rbind(tibble(name='NSPECOUT', val=length(cp_species)))
+    
+    write_input(pu_templates$total_pm, 
+                file.path(output_dir, paste0(run_name_out, pu.inp.out$total_pm)),
+                totalPM_params)
+  }
+  
+  if(run_deposition) {
+    # Write deposition INP file
+    pu.depo.out = file.path(output_dir, paste0(run_name_out, pu.inp.out$deposition))
+    pu_params[pu_params$name == 'UTLDAT', 'val'] %<>% gsub('_TotalPM.CON', "_Depo.FLX", .)
+    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
+    
+    pu_params %<>% filter(name != 'MODDAT', name != 'NFILES') %>% 
+      bind_rows(tibble(name='MODDAT', val=c(gsub("\\.CON", ".WET", conF), gsub("\\.CON", ".DRY", conF))),
+                tibble(name='NFILES', val=as.character(length(run_name)*2)),
+                tibble(name='NSCALED', val=as.character(nscaled*2)))
+    
+    if(!is.null(emissions_scaling))
+      emissions_scaling[['2d']] %<>% (function(x) c(c(gsub("\\.CON", ".WET", x), gsub("\\.CON", ".DRY", x))))
+    
+    #save file name for input to calpost
+    depo.flx <- pu_params[pu_params$name == 'UTLDAT', 'val']
+    
+    write_input(pu_templates$deposition, 
+                pu.depo.out,
+                pu_params,
+                subgroup=emissions_scaling)
+    
+    # Add the Hg fraction in PM
+    pu.depo.out %>% readLines -> pu.depo
+    pu.depo %>% gsub(' ', '', .) %>% grep("!CSPECCMP=Hg!", .) -> hgcmp_startline
+    pu.depo %>% gsub(' ', '', .) %>% grep("!PM10=", .) %>% 
+      subset(.>hgcmp_startline) %>% head(1) -> hgcmp_pm10line
+    pu.depo[hgcmp_pm10line] = paste("!    PM10  =     ",pm10fraction," !")
+    writeLines(pu.depo, pu.depo.out)
+  }
+
+  # Make CALPOST INP files
+  cp.period = cp_period_function(params)
+
+  params %<>% subset(name == 'ABTZ')
+  params[nrow(params)+1,] <- c('METRUN', METRUN)
+  
+  if(METRUN == 0) {
+    params[nrow(params)+1,] <- c('ISYR', year(cp.period$start))
+    params[nrow(params)+1,] <- c('ISMO', month(cp.period$start))
+    params[nrow(params)+1,] <- c('ISDY', day(cp.period$start))
+    params[nrow(params)+1,] <- c('ISHR', hour(cp.period$start))
+    
+    params[nrow(params)+1,] <- c('IEYR', year(cp.period$end))
+    params[nrow(params)+1,] <- c('IEMO', month(cp.period$end))
+    params[nrow(params)+1,] <- c('IEDY', day(cp.period$end))
+    params[nrow(params)+1,] <- c('IEHR', hour(cp.period$end))
+  }
+  
+  output_dir_cp <- paste0(gsub('\\$|/$','',output_dir), '/')
+  params[nrow(params)+1,] <- c('MODDAT', totalpm.con)
+  params[nrow(params)+1,] <- c('PSTLST', file.path(output_dir, paste0(run_name_out, "_CALPOST.LST")))
+  params[nrow(params)+1,] <- c('TSUNAM', cp_run_name)
+  params[nrow(params)+1,] <- c('TUNAM', cp_run_name)
+  params[nrow(params)+1,] <- c('PLPATH', output_dir_cp,"not set")
+  params[nrow(params)+1,] <- c('TSPATH', ifelse(run_timeseries, output_dir_cp,"not set"))
+  params[nrow(params)+1,] <- c("LD", run_discrete_receptors %>% as.character %>% substr(1,1))
+  params[nrow(params)+1,] <- c("LG", run_gridded_receptors %>% as.character %>% substr(1,1))
+  
+  if(run_concentrations) {
+    # write_input file to get all concentration outputs
+  
+    species_params = list(LTIME=ifelse(run_timeseries, 'T', 'F'),
+                          NSPEC = length(cp_species),
+                          ASPEC   = cp_species %>% paste(collapse=', '),
+                          ILAYER  = rep(1, length(cp_species)) %>% paste(collapse=', '),
+                          IPRTU = rep(3, length(cp_species)) %>% paste(collapse=', '),
+                          A = rep('0.0', length(cp_species)) %>% paste(collapse=', '),
+                          B = rep('0.0', length(cp_species)) %>% paste(collapse=', '),
+                          L1PD = rep('F', length(cp_species)) %>% paste(collapse=', '),
+                          L3HR = rep('F', length(cp_species)) %>% paste(collapse=', '),
+                          LRUNL = rep('T', length(cp_species)) %>% paste(collapse=', '),
+                          L1HR = (cp_species %in% run_hourly) %>% as.character() %>% substr(1,1) %>% paste(collapse=', '),
+                          L24HR   = rep('T', length(cp_species)) %>% paste(collapse=', ')) %>% 
+      unlist %>% data.frame(name = names(.), val= .)
+    
+    write_input(calpost_templates$concentration, 
+                file.path(output_dir, paste0(run_name_out, cp.inp.out$concentration)),
+                bind_rows(params, species_params),
+                set.all=F)
+  }
+  
+  if(run_deposition) {
+    # Write_input file to get all deposition outputs
+    params[params$name == 'MODDAT', 'val'] <- depo.flx
+    params[params$name == 'PSTLST', 'val'] <- file.path(output_dir, paste0(run_name_out, "_Depo_CALPOST.LST"))
+    write_input(calpost_templates$deposition, 
+                file.path(output_dir, paste0(run_name_out, cp.inp.out$deposition)),
+                params,
+                set.all=F) 
+  }
+  
+  # Make bat files to run POSTUTIL and CALPOST
+  pu.bat <- file.path(output_dir, paste0("pu_", run_name_out, ".bat"))
+  
+  pu_runs = NULL
+  if(run_concentrations) pu_runs = c('repartition', 'total_pm')
+  if(run_deposition) pu_runs %<>% c('deposition')
+  
+  writeLines(c(paste("cd", output_dir),
+               paste0(pu_exe, " ", normalizePath(file.path(output_dir, 
+                                                           paste0(run_name_out, pu.inp.out[pu_runs])))),
+               "pause"), 
+             pu.bat)
+  
+  cp_runs = NULL
+  if(run_concentrations) cp_runs = 'concentration'
+  if(run_deposition) cp_runs %<>% c('deposition')
+  
+  calpost.bat <- file.path(output_dir, paste0("calpost_", run_name_out, ".bat"))
+  writeLines(c(paste("cd", output_dir),
+               paste0(calpost_exe, " ", normalizePath(file.path(output_dir, 
+                                                  paste0(run_name_out, cp.inp.out[cp_runs])))), "pause"), 
+             calpost.bat)
+  
+  old_wd <- getwd()
+  setwd(output_dir)
+  on.exit(setwd(old_wd))
+  if(run_pu) system(sprintf('cmd /c "%s"', normalizePath(pu.bat)))
+  if(run_calpost) system(sprintf('cmd /c "%s"',normalizePath(calpost.bat)))
+}
+
+
+make_emissions_scaling_lines <- function(con_file, emissions_scaling, pm_species=c('PM15', 'PM10', 'PPM25'), precision=6) {
+  scaling_lines = paste("!  MODDAT =",con_file,"!")
+  
+  so2_species=c('SO2', 'SO4')
+  nox_species=c('NO', 'NO2', 'NO3', 'HNO3')
+  emissions_scaling %<>% lapply(signif, precision)
+  
+  if(!is.null(emissions_scaling$so2)) scaling_lines %<>% c(paste("!",so2_species,"=",emissions_scaling$so2,", 0.0 !"))
+  if(!is.null(emissions_scaling$nox)) scaling_lines %<>% c(paste("!",nox_species,"=",emissions_scaling$nox,", 0.0 !"))
+  if(!is.null(emissions_scaling$pm)) scaling_lines %<>% c(paste("!",pm_species,"=",emissions_scaling$pm,", 0.0 !"))
+  if(!is.null(emissions_scaling$hg)) scaling_lines %<>% c(paste("!",c('Hg0', 'RGM'),"=",emissions_scaling$hg,", 0.0 !"))
+  
+  scaling_lines %>% c("! END !")
+}
+
+
+read_postutil_params_from_calpuff_inp <- function(calpuff_inp, pu_start_hour=NULL, nper=NULL) {
   # Read CALPUFF.INP
   puffInp <- readLines(calpuff_inp)
   
@@ -79,163 +298,21 @@ runPostprocessing <- function(
       get_param_val(params$cpuname[p], .) -> params$val[p]
   }
   
-  if(is.null(output_dir)) output_dir = dirname(params$val[params$name=='MODDAT']) %>% normalizePath()
-  message(paste("output dir:", output_dir))
-  
-  conF <- params$val[params$name=='MODDAT']
-
   # Calculate POSTUTIL time period if not set
   if(is.null(pu_start_hour)) {
     params$val[params$name == 'ISHR'] %<>% as.numeric %>% add(2)
   } else params$val[params$name == 'ISHR'] <- pu_start_hour
-    
   
+  calpuff_output_dir = dirname(params$val[params$name=='MODDAT']) %>% normalizePath()
   
   if(is.null(nper)) {
-    nper <- difftime(paste(params$val[match(c('ISYR', 'ISMO', 'ISDY', 'ISHR'), params$name)], collapse = ' ') %>% ymd_h,
-                     paste(params$val[match(c('IEYR', 'IEMO', 'IEDY', 'IEHR'), params$name)], collapse = ' ') %>% ymd_h, units='hours') %>% 
+    nper = difftime(paste(params$val[match(c('ISYR', 'ISMO', 'ISDY', 'ISHR'), params$name)], collapse = ' ') %>% ymd_h,
+                    paste(params$val[match(c('IEYR', 'IEMO', 'IEDY', 'IEHR'), params$name)], collapse = ' ') %>% ymd_h, units='hours') %>% 
       as.numeric() %>% abs %>% subtract(3)
   }
   
-  params %<>% dplyr::select(-cpuname) %>% filter(!grepl("^IE", name))
+  params %<>% bind_rows(tibble(name='NPER', val=as.character(nper)))
   
-  # Set params determined by program
-  params[nrow(params)+1,] <- c('UTLLST', gsub("\\.CON", "_POSTUTIL_REPART.LST", conF))
-  params[nrow(params)+1,] <- c('UTLDAT', gsub("\\.CON", "_repart.CON", conF))
-  params[nrow(params)+1,] <- c('NPER', nper)
-  
-  params %>% filter(name!='ABTZ') -> pu_params
-  
-  if(run_concentrations) {
-    
-    if(!is.null(files_met))
-      pu_params[params$name == 'UTLMET', 'val'] <- files_met %>% arrange(desc(GridD)) %>% use_series(METDAT) %>%
-        head(1)
-    
-    # Write repartitioning INP file
-    write_input(pu_templates$repartition, 
-                file.path(output_dir, paste0(run_name, pu.inp.out$repartition)),
-                pu_params)
-    
-    # Write_input file to calculate total PM
-    pu_params[pu_params$name == 'MODDAT', 'val'] <- pu_params[pu_params$name == 'UTLDAT', 'val']
-    pu_params[pu_params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_TotalPM.CON", conF)
-    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("REPART", "TotalPM", .)
-    pu_params[!(pu_params$name %in% c('BCKNH3', 'UTLMET')), ] -> pu_params
-    
-    pu_params %>% bind_rows(tibble(name='ASPECO', val=cp_species)) -> totalPM_params
-    totalPM_params %<>% rbind(tibble(name='NSPECOUT', val=length(cp_species)))
-    
-    write_input(pu_templates$total_pm, 
-                file.path(output_dir, paste0(run_name, pu.inp.out$total_pm)),
-                totalPM_params)
-  }
-  
-  if(run_deposition) {
-    # Write deposition INP file
-    pu.depo.out = file.path(output_dir, paste0(run_name, pu.inp.out$deposition))
-    pu_params[pu_params$name == 'UTLDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
-    pu_params[pu_params$name == 'MODDAT', 'val'] <- gsub("\\.CON", ".WET", conF)
-    pu_params[pu_params$name == 'UTLLST', 'val'] %<>% gsub("TotalPM", "Depo", .)
-    
-    pu_params[nrow(pu_params)+1,] <- c('MODDAT', gsub("\\.CON", ".DRY", conF))
-    write_input(pu_templates$deposition, 
-                pu.depo.out,
-                pu_params)
-    
-    # Add the Hg fraction in PM
-    pu.depo.out %>% readLines -> pu.depo
-    pu.depo %>% gsub(' ', '', .) %>% grep("!CSPECCMP=Hg!", .) -> hgcmp_startline
-    pu.depo %>% gsub(' ', '', .) %>% grep("!PM10=", .) %>% 
-      subset(.>hgcmp_startline) %>% head(1) -> hgcmp_pm10line
-    pu.depo[hgcmp_pm10line] = paste("!    PM10  =     ",pm10fraction," !")
-    writeLines(pu.depo, pu.depo.out)
-  }
-
-  # Make CALPOST INP files
-  cp.period = cp_period_function(params)
-
-  params %<>% subset(name == 'ABTZ')
-  params[nrow(params)+1,] <- c('METRUN', METRUN)
-  
-  if(METRUN == 0) {
-    params[nrow(params)+1,] <- c('ISYR', year(cp.period$start))
-    params[nrow(params)+1,] <- c('ISMO', month(cp.period$start))
-    params[nrow(params)+1,] <- c('ISDY', day(cp.period$start))
-    params[nrow(params)+1,] <- c('ISHR', hour(cp.period$start))
-    
-    params[nrow(params)+1,] <- c('IEYR', year(cp.period$end))
-    params[nrow(params)+1,] <- c('IEMO', month(cp.period$end))
-    params[nrow(params)+1,] <- c('IEDY', day(cp.period$end))
-    params[nrow(params)+1,] <- c('IEHR', hour(cp.period$end))
-  }
-  
-  output_dir_cp <- paste0(gsub('\\$|/$','',output_dir), '/')
-  params[nrow(params)+1,] <- c('MODDAT', gsub("\\.CON", "_TotalPM.CON", conF))
-  params[nrow(params)+1,] <- c('PSTLST', gsub("\\.CON", "_CALPOST.LST", conF))
-  params[nrow(params)+1,] <- c('TSUNAM', cp_run_name)
-  params[nrow(params)+1,] <- c('TUNAM', cp_run_name)
-  params[nrow(params)+1,] <- c('PLPATH', output_dir_cp,"not set")
-  params[nrow(params)+1,] <- c('TSPATH', ifelse(run_timeseries, output_dir_cp,"not set"))
-  params[nrow(params)+1,] <- c("LD", run_discrete_receptors %>% as.character %>% substr(1,1))
-  params[nrow(params)+1,] <- c("LG", run_gridded_receptors %>% as.character %>% substr(1,1))
-  
-  if(run_concentrations) {
-    # write_input file to get all concentration outputs
-  
-    species_params = list(LTIME=ifelse(run_timeseries, 'T', 'F'),
-                          NSPEC = length(cp_species),
-                          ASPEC   = cp_species %>% paste(collapse=', '),
-                          ILAYER  = rep(1, length(cp_species)) %>% paste(collapse=', '),
-                          IPRTU = rep(3, length(cp_species)) %>% paste(collapse=', '),
-                          A = rep('0.0', length(cp_species)) %>% paste(collapse=', '),
-                          B = rep('0.0', length(cp_species)) %>% paste(collapse=', '),
-                          L1PD = rep('F', length(cp_species)) %>% paste(collapse=', '),
-                          L3HR = rep('F', length(cp_species)) %>% paste(collapse=', '),
-                          LRUNL = rep('T', length(cp_species)) %>% paste(collapse=', '),
-                          L1HR = (cp_species %in% run_hourly) %>% as.character() %>% substr(1,1) %>% paste(collapse=', '),
-                          L24HR   = rep('T', length(cp_species)) %>% paste(collapse=', ')) %>% 
-      unlist %>% data.frame(name = names(.), val= .)
-    
-    write_input(calpost_templates$concentration, 
-                file.path(output_dir, paste0(run_name, cp.inp.out$concentration)),
-                bind_rows(params, species_params),
-                set.all=F)
-  }
-  
-  if(run_deposition) {
-    # Write_input file to get all deposition outputs
-    params[params$name == 'MODDAT', 'val'] <- gsub("\\.CON", "_Depo.FLX", conF)
-    params[params$name == 'PSTLST', 'val'] <- gsub("\\.CON", "_Depo_CALPOST.LST", conF)
-    write_input(calpost_templates$deposition, 
-                file.path(output_dir, paste0(run_name, cp.inp.out$deposition)),
-                params,
-                set.all=F) 
-  }
-  
-  # Make bat files to run POSTUTIL and CALPOST
-  pu.bat <- file.path(output_dir, paste0("pu_", run_name, ".bat"))
-  
-  pu_runs = NULL
-  if(run_concentrations) pu_runs = c('repartition', 'total_pm')
-  if(run_deposition) pu_runs %<>% c('deposition')
-  
-  writeLines(c(paste("cd", output_dir),
-               paste0(pu_exe, " ", normalizePath(file.path(output_dir, 
-                                                           paste0(run_name, pu.inp.out[pu_runs])))),
-               "pause"), 
-             pu.bat)
-  
-  cp_runs = NULL
-  if(run_concentrations) cp_runs = 'concentration'
-  if(run_deposition) cp_runs %<>% c('deposition')
-  
-  calpost.bat <- file.path(output_dir, paste0("calpost_", run_name, ".bat"))
-  writeLines(c(paste("cd", output_dir),
-               paste0(calpost_exe, " ", normalizePath(file.path(output_dir, 
-                                                  paste0(run_name, cp.inp.out[cp_runs])))), "pause"), 
-             calpost.bat)
-  
-  if(run_pu) system(sprintf('cmd /c "%s"', normalizePath(pu.bat)))
-  if(run_calpost) system(sprintf('cmd /c "%s"',normalizePath(calpost.bat)))
+  return(list(params=params,
+              calpuff_output_dir=calpuff_output_dir))
 }
