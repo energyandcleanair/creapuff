@@ -85,7 +85,7 @@ basemap <- get_basemap(plot_bb)
 calpuff_files_all %>% 
   filter(scenario %notin% c('bg', 'bgmx'),
          species %in% c('so2', 'no2', 'pm25', 'tpm10'),
-         !is.na(threshold)) %>% '['(10,T) %>% 
+         !is.na(threshold)) %>% 
   plot_contours(plot_bb=plot_bb,
                 contour_type='both',
                 point_sources=point_sources,
@@ -121,36 +121,6 @@ point_sources %>% st_drop_geometry() %>% to_spdf %>% raster::extract(pm25, .)
 
 
 # ==============================================================================
-# ... Moving ...
-print('... moving output files (png, exceedances, tseries,...)')
-# PNG files
-png_dir <- file.path(project_dir,"png")
-if (!dir.exists(png_dir)) dir.create(png_dir)
-file.path(output_dir,list.files(output_dir,"\\.png$" )) -> png_files
-file.copy(png_files,png_dir, overwrite = TRUE)
-file.remove(png_files)
-# KML files
-kmz_dir <- file.path(project_dir,"kmz") ; 
-if (!dir.exists(kmz_dir)) dir.create(kmz_dir)
-file.path(output_dir,list.files(output_dir,"\\.kmz$" )) -> kmz_files
-file.copy(kmz_files,kmz_dir, overwrite = TRUE)
-file.remove(kmz_files)
-# Exeedances
-exceedances_dir <- file.path(project_dir,"exceedances")
-if (!dir.exists(exceedances_dir)) dir.create(exceedances_dir)
-file.path(output_dir,list.files(output_dir,"expPop|threshold_exceedances" )) -> exceedances_files
-file.copy(exceedances_files,exceedances_dir, overwrite = TRUE)
-file.remove(exceedances_files)
-# tseries
-tseries_dir <- file.path(project_dir,"tseries")
-if (!dir.exists(tseries_dir)) dir.create(tseries_dir)
-file.path(output_dir,list.files(output_dir,"tseries" )) -> tseries_files
-file.copy(tseries_files,tseries_dir, overwrite = TRUE)
-file.remove(tseries_files)
-
-browser()
-
-# ==============================================================================
 #get WDPA protected areas
 grids_wdpa <- grids
 grids_wdpa$gridR %<>% (function(x) {crop(x, extent(x)*.33)})
@@ -158,5 +128,16 @@ get_wdpa_for_grid(grids_wdpa) -> wdpa_areas
 saveRDS(file.path(output_dir, 'WDPA areas.RDS'))
 
 #output deposition results
-get_deposition_results(calpuff_files, dir=output_dir, wdpa_areas=wdpa_areas) -> depo
+calpuff_files_all %>% get_deposition_results(dir=output_dir, wdpa_areas=wdpa_areas) -> depo2
 
+depo$by_landuse %>% filter(broad.cat != 'ocean') %>% group_by(pollutant, scenario, unit) %>% summarise(across(deposition, sum))
+depo$into_protected_areas %>% 
+  rename(wdpa_area=name) %>% 
+  pivot_longer(-wdpa_area) %>% 
+  mutate(species = name %>% gsub('_.*', '', .),
+         variable = name %>% gsub('.*_', '', .),
+         scenario = name %>% gsub('^[a-z]*_', '', .) %>% gsub('_.*', '', .)) ->
+  wdpa_depo
+
+
+wdpa_depo %>% filter(scenario=='mnpp') %>% group_by(variable) %>% arrange(desc(value)) %>% slice_max(value, n=5)

@@ -23,7 +23,7 @@ read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% select(1:10) %>%
   mutate(pollutant='Hg', FGD=grepl('FGD', AQCS)) -> hg
 
 read_xlsx(stack_file, skip=1, n_max=20, sheet='Mercury') %>% 
-  select(plant='Power Station', matches('reduction|FGC')) %>% 
+  select(plant='Power Station', matches('reduction|FGC|Mt')) %>% 
   set_names(make.names(names(.))) -> hg_control
 
 #ESP+wFGD / ESP / FF / none / CFBC
