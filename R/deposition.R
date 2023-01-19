@@ -1,4 +1,4 @@
-get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL){
+get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL, long_format=T){
   #deposition totals
   calpuff_files %>% subset(type=='deposition') -> depodf
   depodf$path %>% stack %>% fixproj -> depoR
@@ -52,15 +52,30 @@ get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL){
     
     #WDPA database extract
     units = ifelse(grepl('hg', names(depoR)), 'mg', 'kg')
+    
     raster::extract(depoR, wdpa_areas, sum) %>% data.frame -> protdepo
-    names(protdepo) <- names(depoR) %>% paste0('_', units, '_total')
-
     depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
-    names(protdepo_per) <- names(depoR) %>% paste0('_', units, '_per.km2')
     depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
-    names(protdepo_maxper) <- names(depoR) %>% paste0('_', units, '_maxper.km2')
-    protdepo %<>% bind_cols(protdepo_per, protdepo_maxper)
-    wdpa_areas$NAME -> protdepo$name
+    
+    if(long_format) {
+      bind_rows(protdepo %>% mutate(wdpa_area=wdpa_areas$NAME, variable='total deposition', 
+                                    across(where(is.numeric), divide_by, ifelse(units=='kg', 1e3, 1e6)),
+                                    unit=recode(units, 'mg'='kg', 'kg'='t'),
+                                    scenario=depodf$scenario, species=depodf$species),
+                protdepo_per %>% mutate(wdpa_area=wdpa_areas$NAME, variable='average deposition', unit=paste0(units, '/km2'),
+                                        scenario=depodf$scenario, species=depodf$species),
+                protdepo_maxper %>% mutate(wdpa_area=wdpa_areas$NAME, variable='maximum local deposition', unit=paste0(units, '/km2'),
+                                           scenario=depodf$scenario, species=depodf$species)) %>% 
+        pivot_longer(where(is.numeric)) ->
+        protdepo
+    } else {
+      names(protdepo) <- names(depoR) %>% paste0('_', units, '_total')
+      names(protdepo_per) <- names(depoR) %>% paste0('_', units, '_per.km2')
+      names(protdepo_maxper) <- names(depoR) %>% paste0('_', units, '_maxper.km2')
+      wdpa_areas$NAME -> protdepo$name
+      
+      protdepo %<>% bind_cols(protdepo_per, protdepo_maxper)
+    }
     
     protdepo %>% write_csv(file.path(dir, 'WDPA areas deposition.csv'))
   }

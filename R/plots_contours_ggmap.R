@@ -17,7 +17,8 @@ plot_contours <- function(calpuff_files,
   
   for(i in seq_along(calpuff_files$path)) {
     #prepare the raster to plot
-    calpuff_files$path[i] %>% raster -> r
+    calpuff_files$path[i] %>% raster %>% multiply_by(calpuff_files$plotscale) -> r
+    plotunit = calpuff_files$plotunit %>% gsub('ug', 'µg', .)
     
     max_val <- r[is.na(area_sources_raster)] %>% max
     
@@ -30,7 +31,7 @@ plot_contours <- function(calpuff_files,
     
     #prepare contour levels and color scales
     levels_to_include <- NULL
-    if(include_threshold_as_break) levels_to_include <- calpuff_files$threshold[i]
+    if(include_threshold_as_break) levels_to_include <- calpuff_files$threshold.plotunit[i]
     brks <- contour_breaks_function(r, levels_to_include=levels_to_include)
     colRamp <- colorRampPalette(color_scale)(length(brks))
     alphas <- seq(0,1,length.out=length(brks)+1)[-1] %>% fill_alpha_function
@@ -76,7 +77,7 @@ plot_contours <- function(calpuff_files,
                ylim=c(plot_bb_3857@ymin, plot_bb_3857@ymax)) +
       theme(panel.border = element_rect(fill=NA, color='black')) +
       labs(title=str_wrap(titletxt, 45), x='', y='') +
-      scale_color_manual(values=colRamp, name='µg/m3') +
+      scale_color_manual(values=colRamp, name=plotunit) +
       scale_fill_manual(values=fillRamp, guide=F) +
       labs(title=str_wrap(titletxt[i], 45), x='', y='') +
       theme_crea() ->
