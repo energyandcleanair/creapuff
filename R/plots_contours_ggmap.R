@@ -95,8 +95,8 @@ get_basemap <- function(plot_bb, maptype = 'hybrid', source='google', ...) {
 }
 
 
-make_contour_breaks <- function(r, levels_to_include=NULL) {
-  sections <- r[] %>% quantile(p=c(0, .5,.9,.985))
+make_contour_breaks <- function(r, levels_to_include=NULL, probs=c(0, .5,.9,.985)) {
+  sections <- r[] %>% quantile(p=probs)
   
   c(pretty(sections[1:2], n=3), 
     pretty(sections[2:3], n=3), 
