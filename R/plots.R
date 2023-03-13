@@ -14,11 +14,19 @@ get_cities = function(plot_bb, grids, n=8, additional_city_regex='$^') {
   return(cities)
 }
 
-make_titletxt = function(calpuff_files) {
-  paste0(ifelse(calpuff_files[["hr"]]<=24,paste0("Maximum ",calpuff_files[["hr"]],"-hour "),
+make_titletxt = function(calpuff_files, include_scenario=T, line_break=T) {
+  scenarioline=''
+  
+  if(include_scenario) 
+    scenarioline = paste0(ifelse(line_break, '\n', ' '),
+                          "from ",calpuff_files[["scenario_description"]])
+  
+  paste0(ifelse(calpuff_files[["hr"]]<=24,
+                paste0("Maximum ",calpuff_files[["hr"]],"-hour "),
                 ifelse(calpuff_files[["type"]]=="concentration","Annual mean ","Annual total ")),
-         calpuff_files[["speciesName"]]," ",calpuff_files[["type"]],
-         "\nfrom ",calpuff_files[["scenario_description"]])
+         calpuff_files[["speciesName"]]," ",
+         calpuff_files[["type"]],
+         scenarioline)
 }
 
 #' Title
