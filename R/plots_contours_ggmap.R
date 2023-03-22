@@ -6,15 +6,18 @@ plot_contours <- function(calpuff_files,
                           area_sources=NULL,
                           basemap=get_basemap(plot_bb),
                           facet_by='',
+                          facet_ncol=NULL,
                           contour_breaks=make_contour_breaks,
-                          contour_break_probs=c(0, .5,.9,.985),
+                          contour_break_probs=c(0, .33,.8,.995),
                           label_contours=T,
+                          label.placer=label_placer_flattest(),
                           skip_labels=1,
                           color_scale=c(crea_palettes$change[4:7]),
                           color_scale_basis_scenario=NULL,
                           fill_alpha_function = (function(x) x^.25*.4),
                           include_threshold_as_break=T,
                           label_sources=T,
+                          source_label_color='orange',
                           output_dir='.',
                           plot_dpi=300, 
                           plot_width=8, plot_height=6) {
@@ -82,6 +85,7 @@ plot_contours <- function(calpuff_files,
           use_series(path) %>% raster
       }
       
+      color_scale_basis_raster %<>% projectRaster(crs='+init=EPSG:4326') %>%  crop(plot_bb)
       contour_breaks <- contour_breaks_fun(color_scale_basis_raster, levels_to_include=levels_to_include,
                                            probs=contour_break_probs)
     }
@@ -94,7 +98,7 @@ plot_contours <- function(calpuff_files,
     #prepare dataframe with raster data for plotting
     r %<>% projectRaster(crs = '+init=EPSG:3857') %>% crop(plot_bb_3857*1.2)
     
-    r %>% as('SpatialGridDataFrame') %>% as_tibble %>% pivot_longer(starts_with('layer')) -> concs_df
+    r %>% as('SpatialGridDataFrame') %>% as_tibble %>% pivot_longer(matches('^layer|^rank')) -> concs_df
     names(concs_df)[1:2] <- c('lon', 'lat')
     if(facet_by != '') concs_df %<>% full_join(tibble(name=names(r), faceting_name=calpuff_files[[i]][[facet_by]]))
     
@@ -107,7 +111,7 @@ plot_contours <- function(calpuff_files,
     
     map_plot <- ggmap(basemap)
     
-    if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name)
+    if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name, ncol=facet_ncol)
     
     if(!is.null(area_sources)) {
       area_sources_df <- area_sources %>% st_centroid() %>% 
@@ -129,17 +133,20 @@ plot_contours <- function(calpuff_files,
       geom_contour(data=concs_df, aes(lon, lat, z=value, col=as.factor(..level..)), breaks=contour_breaks)
     
     if(!is.null(point_sources)) {
-      point_sources_df <- point_sources %>% bind_cols(st_coordinates(.)) %>% 
-        select(-lon, -lat) %>% st_drop_geometry() %>% rename(lon=X, lat=Y, source=plant)
+      point_source_coords <- point_sources %>% st_coordinates()  %>% as_tibble %>% '['(T,1:2) %>% set_names(c('lon', 'lat'))
+      point_sources_df <- point_sources %>% select(-any_of(c('lon', 'lat'))) %>% 
+        bind_cols(point_source_coords) %>% 
+        st_drop_geometry()
       map_plot = map_plot + annotation_spatial(point_sources, mapping=aes(shape='modeled sources'), 
-                                               col='black', stroke=1) +
+                                               col=source_label_color, stroke=1) +
         scale_shape_manual(values=2, name='', guide=guide_legend(override.aes = list(linetype = 0)))
     }
     
     sources_to_label <- bind_rows(point_sources_df, area_sources_df)
+    
     if(nrow(sources_to_label)>0 & label_sources) {
       map_plot = map_plot + 
-        geom_text_repel(data=sources_to_label, mapping=aes(label=source), max.overlaps = 20)
+        geom_text_repel(data=sources_to_label, mapping=aes(label=source), max.overlaps = 20, color=source_label_color, face='bold')
     }
     
     map_plot +

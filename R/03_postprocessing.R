@@ -52,7 +52,7 @@ runPostprocessing <- function(
   pu.inp.out <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
   cp.inp.out <- calpost_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
 
-  paramlist <- read_postutil_params_from_calpuff_inp(calpuff_inp, pu_start_hour=pu_start_hour, nper=nper)
+  paramlist <- read_postutil_params_from_calpuff_inp(calpuff_inp, files_met=files_met, pu_start_hour=pu_start_hour, nper=nper)
   params <- paramlist$params
   
   if(is.null(output_dir)) output_dir = paramlist$calpuff_output_dir
@@ -78,9 +78,9 @@ runPostprocessing <- function(
     nscaled=length(emissions_scaling)
     if(!all(names(emissions_scaling) %in% run_name)) {
       if(!all(names(emissions_scaling) %in% c('so2', 'nox', 'pm', 'hg'))) stop('emissions_scaling names must match with run_names')
-      nscaled=1
-      emissions_scaling <- list()
-      emissions_scaling[[run_name]] <- emissions_scaling
+      nscaled=length(run_name)
+      emissions_scaling <- list(rep(emissions_scaling, nscaled))
+      names(emissions_scaling) <- run_name
     }
     
     names(emissions_scaling) %>% 
@@ -266,7 +266,7 @@ make_emissions_scaling_lines <- function(con_file, emissions_scaling, pm_species
 }
 
 
-read_postutil_params_from_calpuff_inp <- function(calpuff_inp, pu_start_hour=NULL, nper=NULL) {
+read_postutil_params_from_calpuff_inp <- function(calpuff_inp, files_met, pu_start_hour=NULL, nper=NULL) {
   # Read CALPUFF.INP
   puffInp <- readLines(calpuff_inp)
   
