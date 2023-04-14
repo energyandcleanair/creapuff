@@ -299,81 +299,17 @@ for(run in queue) {
 }
 
 #write out bat files to run in batches
-calpuff_result %>% lapply('[[', 'inpfiles_created') %>% unlist %>% split(1:8) -> batches
+calpuff_result %>% lapply('[[', 'inpfiles_created') %>% unlist %>% split(1:6) -> batches
 for(i in seq_along(batches)) {
   batches[[i]] %>% paste(calpuff_exe, .) %>% c('pause') %>% 
     writeLines(file.path(output_dir, paste0('batch_', i, '.bat')))
 }
 
-# Execute each CALPUFF bat file
-for(run in queue) {
-  emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-  run_name <- emissions_data_run$emission_names  
-  bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-  shell.exec(normalizePath(bat_file))
-  Sys.sleep(10)
-} 
-
-# All-in-one solution: only one CALPUFF simulation for all sources
-# calpuff_result <- creapuff::runCalpuff(
-  # emissions_data = emissions_data,               # For constant emission data
-  # source_names = emissions_data$emission_names,  # Optional. If not set: read from emissions_data (if not present, set automatically)
-  # FGD = emissions_data$FGD,                      # Optional. If not set: read from emissions_data (if not present an error occurs)
-  # receptors = receptors,                         # Optional. If not set: full domain grid
-  # o3dat = o3dat,                                 # Optional. If not set: no surface data
-  # species_configuration = "so2_nox_pm_hg",       # Two possible values: "so2_nox_pm" or "so2_nox_pm_hg"
-  # bgconcs = bgconcs,                             # Optional. If not set: std values
-  # # addparams = addparams,                       # Optional. If not set: std values
-  # run_name = calmet_result$run_name,
-  # output_dir = output_dir,
-  # params_allgrids = calmet_result$params,
-  # gis_dir = gis_dir,
-  # calpuff_exe = calpuff_exe,
-  # calpuff_template = calpuff_template)
-}
-
-if (emission_type == "varying") {
-  queue = unique(emissions_data$emission_names)
-  for(run in queue) {
-    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    # run_name <- paste(calmet_result$run_name, emissions_data_run$emission_names,sep='_')  # TO DO : delete calmet_result$run_name in run name !
-    run_name <- emissions_data_run$emission_names 
-    NPT2 <- emissions_data_run$N_sources  # Number of emission sources per file
-    print(paste0("CALPUFF run name: ", run_name, ", n_sources: ", NPT2))
-    
-    calpuff_result <- creapuff::runCalpuff(
-      # emissions_data = emissions_data,     # For constant emissions 
-      # source_names = source_names,         # Optional. If not set: read from emissions_data (if not present, set automatically)
-      # FGD = "T",                           # Optional. If not set: read from emissions_data (if not present, an error occurs)
-      receptors=receptors,                   # Optional. If not set: full domain grid
-      o3dat=o3dat,                           # Optional. If not set: no surface data
-      bgconcs=bgconcs,                       # Optional. If not set: std values
-      species_configuration = "so2_nox_pm_hg",  # Two possible values: "so2_nox_pm", "so2_nox_pm_hg"
-      addparams = list(NPTDAT = 1,           # For arbitrary-varying emissions
-                       PTDAT = emissions_data_run$Path,
-                       NPT2 = NPT2),
-      run_name=run_name,
-      output_dir = output_dir,
-      params_allgrids = calmet_result$params,
-      gis_dir = gis_dir,
-      calpuff_exe = calpuff_exe,
-      calpuff_template = calpuff_template
-    )
-  } 
-  
-  # Execute each CALPUFF bat file
-  for(run in queue) {
-    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-    run_name <- emissions_data_run$emission_names
-
-    bat_file <- file.path(output_dir, paste0(run_name, '_1', '.bat'))
-    # shell.exec(normalizePath(bat_file))
-    # Sys.sleep(10)
-  }
-}
 
 
-browser()
+
+
+# POST-PROCESSING ##############################################################
 
 plants = emissions_data$Plant %>% unique
 
