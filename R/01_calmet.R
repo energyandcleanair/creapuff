@@ -29,6 +29,7 @@ runCalmet <- function(
   calmet_templates,
   only_make_additional_files=F,
   out_files=NULL,
+  boundaries_for_plotting=NULL,
   run_calmet=F
 ){
   
@@ -131,7 +132,8 @@ runCalmet <- function(
   dom_pols = grids_to_domains(grids, target_crs)
   
   #admin boundaries for plotting
-  get_adm(level=0, res='low') %>% cropProj(dom_pols) -> admUTM
+  if(is.null(boundaries_for_plotting)) boundaries_for_plotting <- get_adm(level=0, res='low')
+  boundaries_for_plotting %>% cropProj(dom_pols) -> admUTM
   
   #plot sources and domains
   read_xlsx(input_xls, sheet='CALPUFF input') %>% 
