@@ -19,10 +19,15 @@
 #'
 #' @examples
 runCalmet <- function(
-  input_xls,
+  input_xls=NULL,
+  sources=NULL,
   wrf_dir,
-  expand_grids,
-  expand_ncells,
+  grid_names=NULL,
+  select_grids='*',
+  expand_grids='*',
+  expand_ncells=-5,
+  crop_grid = NULL,
+  grid_cell_index=NULL,
   output_dir,
   gis_dir,
   calmet_exe,
@@ -37,7 +42,7 @@ runCalmet <- function(
   dir.create(output_dir, showWarnings = F, recursive = T)
   
   # Normalise paths: CALPUFF doesn't like ~
-  input_xls %<>% normalizePath()
+  if(!is.null(input_xls)) input_xls %<>% normalizePath()
   wrf_dir %<>% normalizePath()
   output_dir %<>% normalizePath()
   gis_dir %<>% normalizePath()
@@ -48,15 +53,17 @@ runCalmet <- function(
   setwd(output_dir)
   
   # Find m3d files in wrf dir
-  m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F)
+  m3d <- list.files(path = wrf_dir, pattern = '\\.m3d$', recursive = F) %>% grep(select_grids, ., value=T)
   if(length(m3d)==0) stop(sprintf("no .m3d file in %s",wrf_dir))
-  m3d %<>% strsplit('_') %>% ldply %>%
+  m3d %<>% strsplit('_') %>% ldply() %>%
     set_names(c('run_name','grid_name','filename_start_date','filename_end_date')) %>%
     tibble(path=file.path(wrf_dir, m3d), .)
   m3d$filename_start_date %<>% gsub(".m3d","",.) %>% paste(.,"00", sep = " ") %>%  ymd_h  # LC
   m3d$filename_end_date %<>% gsub(".m3d","",.) %>% paste(.,"23", sep = " ") %>%  ymd_h  # LC
   # end_date <- m3d$filename_end_date[length(m3d$filename_end_date)]  # LC
   run_name <- m3d$run_name[1] # LC
+  
+  if(!is.null(grid_names)) m3d$grid_name <- grid_names
   
   #build a data frame with the header info from all files
   # m3d %<>% tibble(path=.) %>% mutate(grid_name=gsub('\\.m3d', '', .),
@@ -103,14 +110,26 @@ runCalmet <- function(
   grids = list()
   for(g in seq_along(m3d_grid)) {
     grid_name = names(m3d_grid)[g]
+    
+    expand_ncells_grid = expand_ncells
+    if(length(expand_ncells)>1) expand_ncells_grid = expand_ncells[g]
+    
     res = m3d$d[m3d$grid_name==grid_name][1]
     expand_degs = ifelse(m3d$expand[m3d$grid_name==grid_name][1],
-                         2*expand_ncells*res/100, 0)
+                         2*expand_ncells_grid*res/100, 0)
     m3d_grid[[g]] %>% to_spdf %>% extent() %>% add(expand_degs) %>% 
       as('SpatialPolygons') -> lldomain  # Non-skewed domain, in the original ll rcs
     crs(lldomain) <- creapuff.env$llproj
     lldomain %>% spTransform(target_crs) -> lldomain_utm  # Skewed domain, in the UTM crs
+    
+    expand_current_grid=T
+    if(!is.null(crop_grid)) {
+      if(!is.na(crop_grid[[g]]))
+        lldomain_utm %<>% crop(crop_grid[[g]])
+    }
+    
     lldomain_utm %>% extent -> bb  # Non-skewed rectangular boundary, with larger area than skewed domain
+    
     step <- res/10
     shrink <- 0
     contains <- F
@@ -124,25 +143,32 @@ runCalmet <- function(
       contains <- lldomain_utm %>% gContains(utmdomain)  # lldomain_utm (g)Contains utmdomain? If NO, continue reduction
       shrink %<>% add(step)
     }
-    
     grids[[grid_name]] = raster(bb_new, res=res, crs=target_crs)
   }
-  
+    
+
   #create polygons of grid boundaries for plotting
   dom_pols = grids_to_domains(grids, target_crs)
   
-  #admin boundaries for plotting
-  if(is.null(boundaries_for_plotting)) boundaries_for_plotting <- get_adm(level=0, res='low')
-  boundaries_for_plotting %>% cropProj(dom_pols) -> admUTM
-  
   #plot sources and domains
-  read_xlsx(input_xls, sheet='CALPUFF input') %>% 
-    mutate_at(c('Lat', 'Long'), as.numeric) %>% to_spdf -> sources
   
-  ggplot() + annotation_spatial(admUTM) + layer_spatial(dom_pols, fill=NA) +
-    theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 
-    annotation_spatial(sources, col='orange')
-  ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
+  if(!is.null(input_xls)) {
+    read_xlsx(input_xls, sheet='CALPUFF input') %>% 
+      mutate_at(c('Lat', 'Long'), as.numeric) %>% to_spdf -> sources
+  }
+  
+  if(!is.null(sources)) {
+    sources %<>% to_spdf
+    #admin boundaries for plotting
+    if(is.null(boundaries_for_plotting)) boundaries_for_plotting <- get_adm(level=0, res='low')
+    boundaries_for_plotting %>% cropProj(dom_pols) -> admUTM
+    
+    ggplot() + annotation_spatial(admUTM) + layer_spatial(dom_pols, fill=NA) +
+      theme(panel.grid=element_blank(), panel.background=element_rect(fill='lightblue')) + 
+      annotation_spatial(sources, col='orange')
+    ggsave(file.path(output_dir, paste0(run_name, '_', 'domains.png')))
+  }
+  
   
   surf.dat <- NA  # NA = don't make SURF.DAT and run without it. 
   
@@ -152,6 +178,15 @@ runCalmet <- function(
   
   for(g in seq_along(grids)) {
     grid_name = names(grids)[g]
+    
+    if(!is.null(grid_cell_index)) {
+      ix = grid_cell_index[[g]]
+      if(!is.na(ix)) {
+        sub_bb = extent(grids[[g]], ix$r1, ix$r2, ix$c1, ix$c2)
+        grids[[g]] %<>% crop(sub_bb)
+      }
+    }
+    
     gridR = grids[[g]]
     res=res(gridR)[1]
     
@@ -171,25 +206,26 @@ runCalmet <- function(
     if(!file.exists(geo.file) | !only_make_additional_files) {
       zoom=8-floor(log(res)/log(2))
       
-      lu_gridR <- raster::disaggregate(gridR, round(res/.3, 0)) # LC : 3.3x WRF grid resolution
       elevatr::get_elev_raster(as(gridR, "SpatialPoints"), z=zoom) -> elevR #HT convert to SpatialPoints first to prevent nrow(.)==NULL bug in elevatr
       elevR %<>% max(0)
       resample(elevR, gridR) -> elev.out # LC : WRF grid resolution
       
-      raster(file.path(gis_dir,
-                       "landcover",
-                       'C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.nc')) %>% # LC : Global Land Use/Cover Product for 2016-2018, only integer values
-        cropProj(lu_gridR, method='ngb') -> luR
+      # LC : Global Land Use/Cover Product for 2016-2018, only integer values
+      lu_gridR <- raster::disaggregate(gridR, 3) 
+      
+      raster(file.path(gis_dir, "landcover", 'C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.nc')) -> luR
+      
+      bb_geo = lu_gridR %>% projectExtent2(crs(luR)) %>% extent %>% multiply_by(1.7)
+      luR %<>% crop(bb_geo)
+      agg_fact <- floor(res(lu_gridR)/(res(luR)*100)/3)[1]
+      if(agg_fact>1) luR %<>% aggregate(agg_fact, statmode, na.rm=T)
+      luR %<>% projectRaster(lu_gridR, method='ngb')
       
       read_xlsx(file.path(gis_dir, "landcover", 'ESACCI-LC-Legend-USGS.xlsx')) -> lc_codes  # LC : Land Use/Cover Codes
       luR_USGS <- luR
       lc_codes$USGS.code[match(values(luR), lc_codes$NB_LAB)] -> values(luR_USGS) # LC : Land Use/Cover Codes in USGS format
       
-      aggregate(luR_USGS, round(res/res(luR_USGS)/2, 0), statmode, na.rm=T) -> luR_coarse
-      resample(luR_coarse, gridR, method='ngb') -> lu.out
-      #resample(luR_USGS, gridR, method='ngb') -> lu.out2 # LC : other possibility, less accurate (?)
-      
-      # setwd(runDir())
+      resample(luR_USGS, gridR, method='ngb') -> lu.out
       
       geo.lu = lu.out %>% raster::as.matrix() %>% round(0) %>% apply(1, paste, collapse=' ')
       geo.elev = elev.out %>% raster::as.matrix() %>% round(0) %>% apply(1, paste, collapse=' ')
