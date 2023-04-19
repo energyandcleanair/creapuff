@@ -42,17 +42,17 @@ calmet_templates <- list(noobs=file.path(template_dir,"CALMET_template.INP"),
                          surfobs=file.path(template_dir,"CALMET_surfObs_template.inp"))
 
 
-# # If Mercury is emitted species
-# calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template_Hg.INP")                       # Mercury (Hg) in emission file
-# pu_templates <- list (repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),  # Mercury (Hg) in emission file 
-#                       deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
-#                       total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))           # Mercury (Hg) in emission file 
+# If Mercury is emitted species
+calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template_Hg.INP")                       # Mercury (Hg) in emission file
+pu_templates <- list (repartition = file.path(template_dir, "Mintia_postutilRepartition.inp"),  # Mercury (Hg) in emission file
+                      deposition = file.path(template_dir, "Mintia_postutil_depo.inp"),
+                      total_pm = file.path(template_dir, "Mintia_postutil_PM10.inp"))           # Mercury (Hg) in emission file
 
-# If Mercury is NOT an emitted species
-calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template.INP")                               # No mercury in emission file 
-pu_templates <- list (repartition = file.path(template_dir, "Mintia_postutilRepartition_noHg.inp"),  # No mercury in emission file 
-                      deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
-                      total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))           # No mercury in emission file
+# # If Mercury is NOT an emitted species
+# calpuff_template <- file.path(template_dir,"CALPUFF_7.0_template.INP")                               # No mercury in emission file 
+# pu_templates <- list (repartition = file.path(template_dir, "Mintia_postutilRepartition_noHg.inp"),  # No mercury in emission file 
+#                       deposition = file.path(template_dir, "Mintia_postutil_depo.inp"), 
+#                       total_pm = file.path(template_dir, "Mintia_postutil_PM10_noHg.inp"))           # No mercury in emission file
 
 
 calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOutput_calpost.inp"), 
@@ -100,10 +100,12 @@ target_crs <- get_utm_proj(zone = unique(out_files$UTMZ), hem = unique(out_files
   # read_xlsx(input_xls, sheet='CALPUFF input') -> emissions_data
 
 read_xlsx(input_xls, skip=1) %>% set_names(make.names(names(.))) -> emissions_data
+read_xlsx(input_xls, skip=0, sheet=3) %>% set_names(make.names(names(.))) -> nps_shares
 
 emissions_data %>% names
 
 emissions_data %>% fill(Power.Plant.Name, .direction='down') %>% 
+  left_join(nps_shares %>% select(Power.Plant.Name, NPS_share)) %>% 
   mutate(across(Power.Plant.Name, ~gsub('\r|\n| (POWER|COAL|GREEN).*', '', .x)),
          plant_unit=paste0(Power.Plant.Name, ifelse(grepl('Project', Unit..), ' ', ' Unit '), Unit..)) %>% 
   select(plant=contains('Plant.Name'), Unit=starts_with('Unit'), Lat, Lon, coal_type=starts_with('Coal.Type'), 
@@ -116,7 +118,8 @@ emissions_data %>% fill(Power.Plant.Name, .direction='down') %>%
          CF.2021=matches("Operating.Rate.*2021"), CF.2022=matches("Operating.Rate.*2022"),
          contains('ton.year'), contains('.g.s.'),
          SO2_control=contains('FGD'), NOx_control=contains('SCR'), dust_control=contains('Particle.Control'),
-         stack_height=contains('Height'), stack_diameter=contains('Diameter'), flue_temperature=contains('Temp'), flue_velocity=matches('Velocity|Speed')) -> 
+         stack_height=contains('Height'), stack_diameter=contains('Diameter'), flue_temperature=contains('Temp'), flue_velocity=matches('Velocity|Speed'),
+         NPS_share) -> 
   emissions_data
 
 emis_cols <- grep('ton\\.year', names(emissions_data))
@@ -126,7 +129,8 @@ names(emissions_data)[emis_cols[5:8]] %<>% gsub('\\..*', '_tpa.2022', .)
 emissions_data %<>% pivot_longer(matches('\\.202.$')) %>% 
   separate(name, c('name', 'year'), sep='\\.') %>% 
   pivot_wider() %>% 
-  mutate(across(stack_height:PM_tpa, as.numeric),
+  mutate(across(flue_velocity, force_numeric),
+         across(stack_height:PM_tpa, as.numeric),
          across(CF, divide_by, 100),
          is_new = force_numeric(COD)>=2022,
          CF = ifelse(is_new, median(CF[!is_new], na.rm=T), CF),
@@ -186,16 +190,26 @@ emissions_data %<>%
   group_by(loc_cluster, across(matches('_cut'))) %>% 
   mutate(cluster=cur_group_id()) %>% ungroup
 
-emissions_data %>% group_by(cluster, year) %>% 
+emissions_data %<>% group_by(cluster, year) %>% 
   mutate(emission_names=paste0(substr(gsub(' ', '', first(plant)), 1, 6), unique(cluster))) %>% 
+  ungroup
+
+emissions_data %<>% mutate(case=as.character(year))
+emissions_data %<>% mutate(across(ends_with("pa"), ~.x*NPS_share),
+                          case=paste0(case, '_NPS')) %>% 
+  bind_rows(emissions_data)
+
+emissions_data %>% group_by(case) %>% summarise(across(ends_with('pa'), sum))
+
+emissions_data %>% 
   write_csv(file.path(emissions_dir,'emissions inputs, with clustering.csv')) %>% 
-  group_by(emission_names, cluster, year) %>% 
+  group_by(emission_names, cluster, case, year) %>% 
   summarise(across(matches('Lon|Lat|stack|flue') & is.numeric, mean, na.rm=T),
             across(c(MW, ends_with('_tpa')), sum, na.rm=T)) %>% 
   write_csv(file.path(emissions_dir,'emissions, clustered.csv')) ->
   emissions_clustered
 
-emissions_clustered %<>% filter(year==2022)
+emissions_clustered %<>% filter(case=='2022')
 
 emissions_data %>% filter(SOx_tpa*NOx_tpa*PM_tpa*Hg_tpa==0)
 emissions_data %>% filter(SOx_tpa!=0, Hg_tpa==0)
@@ -244,6 +258,11 @@ receptors[receptors$Xkm %% 30 < 15 & receptors$Ykm %% 30 < 15 & receptors$nesfac
 # Receptor check
 print(paste('Adding background grid:', calmet_result$run_name, sum(receptors$include), 'receptors'))
 if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
+
+receptors %>% saveRDS(file.path(output_dir, 'receptors.RDS'))
+
+receptors <- readRDS(file.path(output_dir, 'receptors.RDS'))
+
 
 # Receptor plot
 quickpng(file.path(output_dir, paste0(calmet_result$run_name, '_', 'receptors+background_grid.png'))  )
@@ -311,10 +330,10 @@ for(i in seq_along(batches)) {
 
 # POST-PROCESSING ##############################################################
 
-plants = emissions_data$Plant %>% unique
+plants = emissions_clustered$emission_names %>% unique
 
 # Load all CAPUFF results, from calpuff_result_*.RDS
-calpuff_results_all <- file.path(output_dir, list.files(output_dir, pattern = 'calpuff_result.*\\.RDS')) %>% lapply(readRDS)  
+calpuff_results_all <- file.path(output_dir, paste0('calpuff_result_',plants,'.RDS')) %>% lapply(readRDS)  
 calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
 names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
 names(inpfiles_created) <- names(calpuff_results_all)
@@ -325,23 +344,19 @@ get_cp_period <- function(params) {
        end = paste0(runyr+1, '-01-01 0') %>% ymd_h)
 }
 
-
-run_from_session=F
-for (plant in c(plants, 'koreasteel')) {
+for (plant in plants) {
   # POST-PROCESSING ##############################################################
   # ============================ All clusters together ============================
   # 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
   
   # ========================== Scenario definition ===============================
   # --- Two main scenarios : 
-  scenario_prefix <- plant %>% gsub('POSCO ', '', .)
-  included_stations <- emissions_data$emission_names[emissions_data$Plant==plant | plant=='koreasteel']
+  scenario_prefix <- plant
   
   # ---
-  calpuff_results_all[names(calpuff_results_all) %in% included_stations]  -> calpuff_results_case
-  inpfiles_created[names(inpfiles_created) %in% included_stations]  -> inpfiles_created_case
-  emissions_data %>% filter(emission_names %in% names(inpfiles_created_case))  -> emissions_data_case
-  write_xlsx(list("CALPUFF input"=emissions_data_case), file.path(emissions_dir, paste0("coordinates_",scenario_prefix,".xlsx")))
+  calpuff_results_all[names(calpuff_results_all) == plant]  -> calpuff_results_case
+  inpfiles_created[names(inpfiles_created) == plant]  -> inpfiles_created_case
+  emissions_clustered %>% filter(emission_names %in% names(inpfiles_created_case))  -> emissions_data_case
   
   # ==============================================================================
   # 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
@@ -363,7 +378,7 @@ for (plant in c(plants, 'koreasteel')) {
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
-    cp_species = c('PM25', 'TPM10', 'SO2', 'NO2'),  # c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
     cp_period_function = get_cp_period,
     run_discrete_receptors=T,
     run_gridded_receptors=F,
@@ -376,93 +391,75 @@ for (plant in c(plants, 'koreasteel')) {
     pu_templates = pu_templates,
     calpost_templates=calpost_templates
   )
-  
-  # Read generic inp files
-  pu_template_desinence <- pu_templates %>% lapply(function(x) gsub("^[^_]*", "", x))
-  pu_sumruns_template_generic=paste0(first_cluster_name, pu_template_desinence$repartition)
-  pu_sumruns_depo_template_generic=paste0(first_cluster_name, pu_template_desinence$depo)
-  readLines(file.path(output_dir,pu_sumruns_template_generic)) -> inp
-  readLines(file.path(output_dir,pu_sumruns_depo_template_generic)) -> inp_depo
-  
-  # Define current input-data list  
-  sumfiles = paste0(toupper(names(inpfiles_created_case)), '.CON')  
-  sumfiles_depo = append (paste0(toupper(names(inpfiles_created_case)), '.DRY'), paste0(toupper(names(inpfiles_created_case)), '.WET'))
-  
-  # Fill generic inp files with current parameters and output-data names 
-  inp %<>% set_puff(list(NFILES = length(sumfiles),  # Function to set parameters in a CALPUFF input file
-                         MNITRATE  =  0,             # Recompute the HNO3/NO3 partition for concentrations, for all sources combined
-                         UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.LST")),  # Output LST file
-                         UTLDAT = file.path(output_dir,paste0(scenario_prefix,".CON"))))                  # Output data file, for concentrations (.CON)
-  inp_depo %<>% set_puff(list(NFILES = length(sumfiles_depo),  # Function to set parameters in a CALPUFF input file
-                              UTLLST = file.path(output_dir,paste0(scenario_prefix,"_POSTUTIL_Depo.LST")),            # Output LST file. Filename-format as ScAll_POSTUTIL_Depo.LST
-                              UTLDAT = file.path(output_dir,paste0(scenario_prefix,"_Depo.FLX"))))                    # Output data file, for fluxes (.FLX). Filename-format as ScAll_Depo.FLX
-  
-  # Fill the corresponding lines for with current input-data list (CALPUFF outputs)
-  con_line <- grep("!MODDAT=", gsub(" ", "", inp))  # Looking for input-data position index 
-  inp <- c(inp[1:(con_line-1)],
-           paste("   ",1:length(sumfiles),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles),"! !END!"),  # For concentrations (.CON)
-           inp[-1:-con_line])
-  con_line_depo <- grep("!MODDAT=", gsub(" ", "", inp_depo))  # Looking for input-data position index
-  inp_depo <- c(inp_depo[1:(con_line_depo-1)],
-                paste("   ",1:length(sumfiles_depo),"            CALPUFF.DAT        ! MODDAT =",file.path(output_dir, sumfiles_depo),"! !END!"),  # For deposition (.DRY, .WET)
-                inp_depo[-1:-con_line_depo[2]])
-  
-  # Write the _POSTUTIL_SUMRUNS.INP and  _postutil_depo.inp files
-  pu_sumruns_template_all <- file.path(output_dir, paste0(scenario_prefix,"_POSTUTIL_SUMRUNS.INP"))
-  writeLines(inp, pu_sumruns_template_all) 
-  pu_sumruns_depo_template_all <- file.path(output_dir, paste0(scenario_prefix,"_postutil_depo.inp"))  # Filename-format for PU bat files (ex: pu_ScAll.bat) 
-  writeLines(inp_depo, pu_sumruns_depo_template_all) 
-  
-  # Create the _SUMRUNS.bat bat file
-  pu_sumruns_bat <- file.path(output_dir, paste0("pu_",scenario_prefix,"_SUMRUNS.bat"))
-  writeLines(c(paste("cd", output_dir),
-               paste0(pu_exe, " ", normalizePath(pu_sumruns_template_all)),
-               "pause"), 
-             pu_sumruns_bat)  # shell.exec(normalizePath(pu_sumruns_bat)) 
-  
-  
-  # 2. Define PU and CP INP and bat files, for summed-up concentrations   
-  name_generic=first_cluster_name  
-  
-  # PU INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
-  file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_postutil'))) -> pu_files_generic
-  pu_files_generic <- pu_files_generic[c(grep("Repartition", pu_files_generic),grep("PM10", pu_files_generic))]  # No need for _postutil_depo.inp, already created
-  for(f in pu_files_generic) {
-    f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%    
-      writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
-  }
-  
-  # CP INP: change names of input and output parameters, from generic "first_cluster_name" to selected scenario (ScAll, or ScB, ...)
-  file.path(output_dir, list.files(output_dir, pattern=paste0('^',first_cluster_name,'_.*calpost'))) -> cp_files_generic
-  for(f in cp_files_generic) {
-    f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
-      gsub(first_cluster_name, scenario_prefix, .) %>% 
-      writeLines(file.path (output_dir, gsub(paste0('^',first_cluster_name), scenario_prefix, basename(f))))
-  }
-  
-  # Bat files 
-  file.path(output_dir,list.files(output_dir, pattern=paste0(first_cluster_name,'\\.bat'))) -> bat_files_generic
-  for(f in bat_files_generic) {
-    f %>% readLines %>% gsub(name_generic, scenario_prefix, .) %>%  
-      gsub(first_cluster_name, scenario_prefix, .) %>% 
-      writeLines(file.path (output_dir, gsub(paste0(first_cluster_name), scenario_prefix, basename(f))))
-  }
-  pu_bat <- file.path(output_dir, paste0("pu_", scenario_prefix, ".bat"))       # shell.exec(normalizePath(pu_bat)) 
-  cp_bat <- file.path(output_dir, paste0("calpost_", scenario_prefix, ".bat"))  # shell.exec(normalizePath(cp_bat)) 
-  
-  # Remove generic INP and bat files
-  file.remove(pu_files_generic)
-  file.remove(cp_files_generic)
-  file.remove(bat_files_generic)
-  
-  if(run_from_session) {
-    # 3. Run all bat files, in sequence
-    system2(pu_sumruns_bat) -> exit_code
-    if(exit_code != 0) stop("errors in POSTUTIL SUMRUNS execution")
-    system2(pu_bat) -> exit_code
-    if(exit_code != 0) stop("errors in POSTUTIL execution")
-    system2(cp_bat) -> exit_code
-    if(exit_code != 0) stop("errors in CALPOST execution")
-  }
 }
 
+#write out bat files to run in batches
+plants %>% split(1) -> batches
+for(i in seq_along(batches)) {
+  paste0('pu_', batches[[i]], '.bat') %>% lapply(readLines) -> pu_lines
+  paste0('calpost_', batches[[i]], '.bat') %>% lapply(readLines) -> cp_lines
+  
+  
+  
+  c(pu_lines[[1]][1],
+    c(pu_lines, cp_lines) %>% unlist %>% subset(!grepl('cd |pause', .)),
+    'pause') %>% 
+    writeLines(file.path(output_dir, paste0('batch_', i, '.bat')))
+}
+
+
+#aggregated scenarios
+emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions, clustered.csv'))
+
+emissions_clustered_all %>% group_by(cluster) %>% 
+  mutate(across(ends_with("pa"), ~.x/.x[case=='2022'])) ->
+  emissions_scaling
+
+
+emissions_scaling %>% 
+  group_by(case) %>% 
+  group_map(function(df, group) {
+    scaling_case <- emissions_scaling %>% ungroup %>% filter(case==group$case) %>% 
+      select(emission_names, pm=PM_tpa, so2=SOx_tpa, nox=NOx_tpa, hg=Hg_tpa) %>% 
+      split(f=.$emission_names) %>% 
+      lapply(select, -emission_names)
+    
+    if(group$case=='2022') scaling_case <- NULL
+
+    list(run_name_out=group$case,
+         run_name=df$emission_names,
+         cp_run_name = group$case,
+         emissions_scaling = scaling_case)
+  }) -> run_queue
+
+runScaling <- function(x) {
+  message(x$run_name_out)
+  runPostprocessing(
+    calpuff_inp=inpfiles_created[[1]],
+    run_name = x$run_name,
+    run_name_out = x$run_name_out,
+    cp_run_name = x$cp_run_name,
+    output_dir=output_dir,
+    files_met = out_files,
+    pm10fraction=calpuff_results_all[['LCPP_IPP']]$pm10fraction,
+    METRUN = 0,  
+    nper = NULL,
+    pu_start_hour = NULL,
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_period_function = get_cp_period,
+    run_discrete_receptors=T,
+    run_gridded_receptors=F,
+    run_concentrations=T,
+    run_deposition=T,
+    run_timeseries = F,
+    run_hourly = c('SO2', 'NO2'), #c('PM25', 'NO2', 'SO2'),
+    emissions_scaling = x$emissions_scaling,
+    run_pu=F,
+    run_calpost=F,
+    pu_templates = pu_templates,
+    calpost_templates=calpost_templates
+  )
+}   
+
+
+run_queue %>% lapply(runScaling)
