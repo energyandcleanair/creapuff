@@ -27,7 +27,6 @@ runCalmet <- function(
   expand_grids='*',
   expand_ncells=-5,
   crop_grid = NULL,
-  grid_cell_index=NULL,
   output_dir,
   gis_dir,
   calmet_exe,
@@ -77,10 +76,14 @@ runCalmet <- function(
                 })
   names(crs_header)[-1] <- c('proj', 'rlat', 'rlon', 'xlat1', 'xlat2',
                              'xorigkm', 'yorigkm', 'd', 'nx', 'ny', 'nz', 'starttime')
+  
   crs_header[,3:12] %<>% mutate_all(as.numeric)
   crs_header$starttime %<>% ymd_h
   m3d %<>% left_join(crs_header)
   m3d$expand <- m3d$grid_name %>% grepl(expand_grids, .)
+  
+  message('Reading CALWRF outputs...')
+  message(format(m3d))
   
   #read grid data from file
   m3d_grid <- m3d %>% dlply(.(grid_name), 
@@ -88,9 +91,19 @@ runCalmet <- function(
                   df=df[1,]
                   read.table(df$path,
                              skip=8+df$nz,
-                             nrows=df$nx*df$ny) %>% 
-                    set_names(c('i', 'j', 'lat', 'lon', 'elev', 'lu', 'x1', 'x2', 'x3'))
+                             nrows=df$nx*df$ny,
+                             fill=T) %>% 
+                    set_names(c('i', 'j', 'lat', 'lon', 'elev', 'lu', 'x1', 'x2', 'x3')) %>% 
+                    mutate(is_in_order = (i %in% 1:df$nx) & (j %in% 1:df$ny)) %>% 
+                    filter(cumsum(!is_in_order)==0) %>% select(-is_in_order) %>% 
+                    mutate(across(everything(), as.numeric))
                 })
+  
+  m3d_grid %>% bind_rows(.id='grid_name') %>% group_by(grid_name) %>% 
+    summarise(across(c(i,j), ~max(.x)-min(.x)+1)) -> grid_span
+  
+  if(any(c(grid_span$i, grid_span$j)>200))
+    stop('Too large grid in CALWRF output data: maximum is 200x200')
   
   #center of domain
   domain_center <- m3d_grid %>% bind_rows() %>% summarise_all(mean) %>% to_spdf

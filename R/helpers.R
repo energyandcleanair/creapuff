@@ -298,9 +298,11 @@ add_missing_columns <- function(df, columns, default_value=0) {
 #'
 #' @examples
 make_srcnam <- function(x) {
-  digits_needed = x %>% length %>% add(1) %>% log(10) %>% ceiling
-  max_name_length = 8-digits_needed
-  x %>% stringi::stri_trans_general("Latin-ASCII") %>% substr(1,7) %>% make.names %>% make.unique(sep='')
+  max_repeats = x %>% table %>% max() %>% subtract(1)
+  max_number_length <- 0
+  if(max_repeats>1) max_number_length <- nchar(max_repeats)
+  
+  x %>% stringi::stri_trans_general("Latin-ASCII") %>% substr(1,8 - max_number_length) %>% make.names %>% make.unique(sep='')
 }
 
 
