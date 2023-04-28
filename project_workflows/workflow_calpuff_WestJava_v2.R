@@ -250,10 +250,7 @@ names(inpfiles_created) <- runs
 
 queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '.CON') %>% file.exists() %>% '['(names(inpfiles_created), .)
 queue <- runs %>% paste0(project_dir, '/calpuff_suite/', . , '_calpost.lst') %>% file.exists() %>% not %>% '['(names(inpfiles_created), .)
-#queue <- runs[!grepl('LCPP', runs)]
 
-#calpuff_results_all[['LCPP_mine']]$pm10fraction <- .45e-3
-# Ask Lauri if it's correct to remove the libne above
 inpfiles_created %>% names %>% 
   tibble(calpuff=.) %>% 
   mutate(calpost=calpuff %>% gsub('BantenSuralayaPhase', 'P', .) %>% gsub('BantenSuralaya-', 'B', .) %>% gsub('Unit', 'U', .) %>% 
@@ -263,13 +260,6 @@ inpfiles_created %>% names %>%
            gsub('Phase', ' Phase ', .) %>% gsub('Unit', ' Unit ', .)) %>% 
   write_csv(file.path(output_dir, 'calpost_names_v2.csv')) ->
   calpost_names
-
-for(scen in queue) {
-  print (scen)
-  cp_run_name=calpost_names$calpost[calpost_names$calpuff==scen]
-  print (cp_run_name)
-
-}
 
 for(scen in queue) {
   # ==============================================================================

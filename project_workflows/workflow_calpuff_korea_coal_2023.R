@@ -372,6 +372,7 @@ for (plant in plants) {
   # Generate "generic" PU and CP INP files (only for the first cluster, run_pu=F, run_calpost=F)
   creapuff::runPostprocessing(
     calpuff_inp=first_cluster_inp,
+    cp_run_name=names(first_cluster_inp),
     output_dir=output_dir,
     files_met = files_met,
     pm10fraction=pm10fraction,
@@ -394,10 +395,10 @@ for (plant in plants) {
 }
 
 #write out bat files to run in batches
-plants %>% split(1) -> batches
+plants %>% split(1:2) -> batches
 for(i in seq_along(batches)) {
-  paste0('pu_', batches[[i]], '.bat') %>% lapply(readLines) -> pu_lines
-  paste0('calpost_', batches[[i]], '.bat') %>% lapply(readLines) -> cp_lines
+  paste0('pu_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> pu_lines
+  paste0('calpost_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> cp_lines
   
   
   
