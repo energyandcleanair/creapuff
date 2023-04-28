@@ -1007,7 +1007,8 @@ get_recep <- function(loc,
     }) %>% bind_rows %>% to_spdf(crs=target_crs)
 }
 
-select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_factors, nesfact_range, files_met) {
+select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_factors, nesfact_range, files_met,
+                             plotadm = creahelpers::get_adm(0, 'coarse')) {
   if(is.list(receptors)) receptors %<>% do.call(rbind, .)
   receptors %<>% subset(!duplicated(coordinates(.)))
   r=raster(extent(receptors), res=1, crs=crs(receptors))
@@ -1026,7 +1027,7 @@ select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_fac
   # if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000*2) stop('too many receptors!')  # LC : *2
   if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
   
-  plotadm = creahelpers::get_adm(0, 'coarse') %>% cropProj(r)
+  plotadm %<>% cropProj(r)
   quickpng(file.path(output_dir, paste0(run_name, '_', 'receptors.png'))  )
   receptors %>% subset(include) %>% sp::plot(col='gray', cex=.5)
   plotadm %>% sp::plot(add=T, border='steelblue')  
