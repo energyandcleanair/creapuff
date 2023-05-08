@@ -191,15 +191,6 @@ runCalmet <- function(
   
   for(g in seq_along(grids)) {
     grid_name = names(grids)[g]
-    
-    if(!is.null(grid_cell_index)) {
-      ix = grid_cell_index[[g]]
-      if(!is.na(ix)) {
-        sub_bb = extent(grids[[g]], ix$r1, ix$r2, ix$c1, ix$c2)
-        grids[[g]] %<>% crop(sub_bb)
-      }
-    }
-    
     gridR = grids[[g]]
     res=res(gridR)[1]
     
