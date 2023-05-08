@@ -71,7 +71,7 @@ calmet_result <- runCalmet(
   gis_dir = gis_dir,
   calmet_exe = calmet_exe,
   calmet_templates = calmet_templates,
-  only_make_additional_files=F,
+  only_make_additional_files=T,
   run_calmet = F
 )
 
@@ -115,6 +115,8 @@ emissions_data %<>% to_spdf %>% crop(spTransform(dom_pols, crs(.))) %>% '@'('dat
 
 emissions_data %<>% rename(exit.temperature=contains('Exit.Temp'), stack.height=contains('Height'))
 
+emissions_data$exit.temperature %<>% pmax(40) %>% add(273.15)
+
 
 # browser()
 
@@ -128,21 +130,25 @@ base_res <- calmet_result$params %>% sapply('[[', 'DGRIDKM') %>% as.numeric %>% 
 nesting_factors = c(1,2,6,12,30)  # 60km, 30km, 10km, 5km, 2km  # c(1,2,5,15) 
 #nesting_factors = c(1,5,15)  # 15km, 3km, 1km 
 
-if(!exists('receptors')) receptors = list()
-queue = unique(emissions_data$emission_names) %>% subset(. %notin% names(receptors))
-for(run in queue) {
-  emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
-  loc <- emissions_data_run %>% to_spdf %>% spTransform(target_crs)
-  # Get discrete receptors with 400x400 dim 
-  get_recep(loc = loc, 
-            run_name = calmet_result$run_name,
-            nesting_factors=nesting_factors,
-            files_met=out_files,
-            target_crs=target_crs) -> receptors[[run]]
+rec_file=file.path(output_dir, 'receptors.RDS')
+if(!file.exists(rec_file)) {
+  receptors = list()
+  queue = unique(emissions_data$emission_names) %>% subset(. %notin% names(receptors))
+  for(run in queue) {
+    emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% head(1)
+    loc <- emissions_data_run %>% to_spdf %>% spTransform(target_crs)
+    # Get discrete receptors with 400x400 dim 
+    get_recep(loc = loc, 
+              run_name = calmet_result$run_name,
+              nesting_factors=nesting_factors,
+              files_met=out_files,
+              target_crs=target_crs) -> receptors[[run]]
     print(run)
+  }
+  
+  saveRDS(receptors, rec_file)
 }
 
-saveRDS(receptors, file.path(output_dir, 'receptors.RDS'))
 receptors <- readRDS(file.path(output_dir, 'receptors.RDS'))
 
 # Select discrete receptors around sources
@@ -170,7 +176,7 @@ if(!file.exists(bgconc_file)) {
 bgconcs <- readRDS(bgconc_file)
 
 for(run in queue) {
-  
+  message(run)
   sources <- emissions_data %>% filter(emission_names==run) %>% to_spdf %>% spTransform(target_crs)
   receptors[[run]] %>% select_receptors(sources=sources,
                                         run_name = run,
@@ -188,12 +194,18 @@ for(run in queue) {
   if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
   
   # Receptor plot
-  quickpng(file.path(output_dir, paste0(calmet_result$run_name, '_', 'receptors+background_grid.png'))  )
+  quickpng(file.path(output_dir, paste0(run, '_', 'receptors+background_grid.png'))  )
   receptors_run %>% subset(include==1) %>% plot(cex=.2)
   plot(sources, col='blue', add=T)
   shp_utm %>% subset(NAME_0=='Indonesia') %>% plot(add=T, border='gray')
   dev.off()
   
+  receptors_run %>% saveRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
+}
+
+for(run in queue) {
+  sources <- emissions_data %>% filter(emission_names==run) %>% to_spdf %>% spTransform(target_crs)
+  receptors_run <- readRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
   o3dat <- NULL # Hourly ozone data file (NULL: no ozone monitoring stations)
   
   emissions_data_run <- emissions_data %>% filter(emission_names == run)
