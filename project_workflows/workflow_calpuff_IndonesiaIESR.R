@@ -87,6 +87,7 @@ calmet_result <- readRDS(file.path(output_dir,"calmet_result.RDS" ))
 # INPUT DATA ###################################################################
 # ============================== Emissions =====================================
 # Define target_crs
+
 calmet_result$params %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% mutate(run_name=calmet_result$run_name) %>%
   mutate_at(c('DGRIDKM', 'XORIGKM', 'YORIGKM', 'NX', 'NY'), as.numeric) %>%
   rename(UTMZ=IUTMZN,
@@ -128,6 +129,11 @@ emissions_data$exit.temperature %<>% pmax(40) %>% add(273.15)
 # (DGRIDKM/MECHDN) of each disk, wrt the grid spacing of the outer 
 # meteo grid (DGRIDKM). Higher factor: higher density of receptors.
 #
+runs = unique(emissions_data$emission_names)
+runs %>% file.path(output_dir, .) %>% paste0('.CON') %>% file.info() -> run_df
+queue = runs[is.na(run_df$size) | run_df$size<1.5e9]
+
+
 base_res <- calmet_result$params %>% sapply('[[', 'DGRIDKM') %>% as.numeric %>% max
 
 nesting_factors = c(1,2,6,12,30)  # 60km, 30km, 10km, 5km, 2km  # c(1,2,5,15) 
@@ -152,7 +158,7 @@ if(!file.exists(rec_file)) {
   saveRDS(receptors, rec_file)
 }
 
-receptors <- readRDS(file.path(output_dir, 'receptors.RDS'))
+receptors <- readRDS(rec_file)
 
 # Select discrete receptors around sources
 # Radius of receptor disks [km], from outer to inner disk
@@ -161,7 +167,6 @@ receptors <- readRDS(file.path(output_dir, 'receptors.RDS'))
 nesfact_range = c(750, 300, 100, 50, 20)   # c(125,25,10) 
 
 # CALPUFF ######################################################################
-queue = unique(emissions_data$emission_names)
 shp=readRDS(file.path(gis_dir, 'boundaries', 'gadm36_0_low.RDS'))
 shp_utm = shp %>% cropProj(calmet_result$grids[[1]])
 
@@ -177,6 +182,9 @@ if(!file.exists(bgconc_file)) {
 }
 
 bgconcs <- readRDS(bgconc_file)
+
+creapuff.env <- list()
+creapuff.env$llproj <- '+proj=longlat +datum=WGS84 +no_defs'
 
 for(run in queue) {
   message(run)
