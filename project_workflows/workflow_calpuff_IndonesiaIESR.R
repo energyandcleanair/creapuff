@@ -35,7 +35,7 @@ emissions_dir <- file.path(project_dir,"emissions") # Directory where arbitrary-
 
 # ================================ General =====================================
 # BE CAREFUL : gis_dir/landcover/C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.nc is CORRUPETED in the repository !! You should replace it with a good one 
-gis_dir <- "F:/gis"                         # The folder where we store general GIS data
+gis_dir <- "H:/gis"                         # The folder where we store general GIS data
 
 bc_dir  <- file.path(gis_dir, "background") # The folder with background atmospheric concentrations for O3, NH3, H2O2
 
@@ -45,7 +45,7 @@ calpuff_exe <- file.path(exe_dir,"CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe")
 pu_exe <- file.path(exe_dir,"POSTUTIL_v7.0.0_L150207/postutil_v7.0.0.exe")
 calpost_exe <- file.path(exe_dir,"CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe")
 
-template_dir="F:/templates"
+template_dir="H:/templates"
 calmet_templates <- list(noobs=file.path(template_dir,"CALMET_template.INP"), 
                          surfobs=file.path(template_dir,"CALMET_surfObs_template.inp"))
 
@@ -133,7 +133,6 @@ runs = unique(emissions_data$emission_names)
 runs %>% file.path(output_dir, .) %>% paste0('.CON') %>% file.info() -> run_df
 queue = runs[is.na(run_df$size) | run_df$size<1.5e9]
 
-
 base_res <- calmet_result$params %>% sapply('[[', 'DGRIDKM') %>% as.numeric %>% max
 
 nesting_factors = c(1,2,6,12,30)  # 60km, 30km, 10km, 5km, 2km  # c(1,2,5,15) 
@@ -186,6 +185,9 @@ bgconcs <- readRDS(bgconc_file)
 creapuff.env <- list()
 creapuff.env$llproj <- '+proj=longlat +datum=WGS84 +no_defs'
 
+
+queue = runs[!file.exists(file.path(output_dir, paste0('receptors_', runs, '.RDS')))]
+
 for(run in queue) {
   message(run)
   sources <- emissions_data %>% filter(emission_names==run) %>% to_spdf %>% spTransform(target_crs)
@@ -214,12 +216,13 @@ for(run in queue) {
   receptors_run %>% saveRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
 }
 
+queue=runs
 for(run in queue) {
   sources <- emissions_data %>% filter(emission_names==run) %>% to_spdf %>% spTransform(target_crs)
   receptors_run <- readRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
   o3dat <- NULL # Hourly ozone data file (NULL: no ozone monitoring stations)
   
-  emissions_data_run <- emissions_data %>% filter(emission_names == run)
+  emissions_data_run <- emissions_data %>% filter(emission_names == run) %>% rename(SO2_tpa=SOx_tpa)
   print(paste0("CALPUFF run name: ", run))
   
   calpuff_result <- runCalpuff(
@@ -243,23 +246,23 @@ for(run in queue) {
 }
 
 #write out bat files to run in batches
-paste0(queue, '.CON') %>% file.exists() %>% which() -> skip
-file.path(output_dir, paste0(queue[-skip], '_CALPUFF_7.0.inp')) %>% split(1:14) -> batches
+queue=runs[paste0(runs, '.CON') %>% file.path(output_dir, .) %>% file.exists() %>% not]
+#queue=runs
+file.path(output_dir, paste0(queue, '_CALPUFF_7.0.inp')) %>% split(1:4) -> batches
 
 #calpuff_result %>% lapply('[[', 'inpfiles_created') %>% unlist %>% split(1:6) -> batches
 for(i in seq_along(batches)) {
   batches[[i]] %>% paste(calpuff_exe, .) %>% c('pause') %>% 
-    writeLines(file.path(output_dir, paste0('CALPUFF_batch_', i, '.bat')))
+    writeLines(file.path(output_dir, paste0('CALPUFF_batch3_', i, '.bat')))
 }
-
-
-
 
 
 
 # POST-PROCESSING ##############################################################
 
-plants = emissions_clustered$emission_names %>% unique
+plants = emissions_data$emission_names %>% unique
+#queue=plants[paste0(plants, '.CON') %>% file.path(output_dir, .) %>% file.exists()]
+queue=plants[paste0(plants, '_totalpm.CON') %>% file.path(output_dir, .) %>% file.exists() %>% not]
 
 # Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, paste0('calpuff_result_',plants,'.RDS')) %>% lapply(readRDS)  
@@ -274,18 +277,12 @@ get_cp_period <- function(params) {
 }
 
 for (plant in plants) {
-  # POST-PROCESSING ##############################################################
-  # ============================ All clusters together ============================
-  # 1. Sum up all output CALPUFF concentrations (.CON), using POSTUTIL
-  
-  # ========================== Scenario definition ===============================
-  # --- Two main scenarios : 
   scenario_prefix <- plant
   
   # ---
   calpuff_results_all[names(calpuff_results_all) == plant]  -> calpuff_results_case
   inpfiles_created[names(inpfiles_created) == plant]  -> inpfiles_created_case
-  emissions_clustered %>% filter(emission_names %in% names(inpfiles_created_case))  -> emissions_data_case
+  emissions_data %>% filter(emission_names %in% names(inpfiles_created_case))  -> emissions_data_case
   
   # ==============================================================================
   # 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
@@ -308,14 +305,14 @@ for (plant in plants) {
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
-    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+    cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'SO4', 'NO3', 'PPM25'),
     cp_period_function = get_cp_period,
     run_discrete_receptors=T,
     run_gridded_receptors=F,
     run_concentrations=T,
     run_deposition=T,
-    run_timeseries = T,
-    run_hourly = c('PM25', 'NO2', 'SO2'),
+    run_timeseries = F,
+    #run_hourly = c('PM25', 'NO2', 'SO2'),
     run_pu=F,
     run_calpost=F,
     pu_templates = pu_templates,
@@ -324,7 +321,7 @@ for (plant in plants) {
 }
 
 #write out bat files to run in batches
-plants %>% split(1:2) -> batches
+queue %>% split(1:4) -> batches
 for(i in seq_along(batches)) {
   paste0('pu_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> pu_lines
   paste0('calpost_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> cp_lines
@@ -337,6 +334,32 @@ for(i in seq_along(batches)) {
     writeLines(file.path(output_dir, paste0('batch_', i, '.bat')))
 }
 
+#aggregated total of all runs
+pm10fraction_mean = calpuff_results_all %>% lapply('[[', 'pm10fraction') %>% unlist %>% mean
+runPostprocessing(
+  calpuff_inp=inpfiles_created[[1]],
+  run_name = plants[1:99],
+  run_name_out = 'baseall1',
+  cp_run_name = 'baseall1',
+  output_dir=output_dir,
+  files_met = out_files,
+  pm10fraction=pm10fraction_mean,
+  METRUN = 0,  
+  nper = NULL,
+  pu_start_hour = NULL,
+  cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+  cp_period_function = get_cp_period,
+  run_discrete_receptors=T,
+  run_gridded_receptors=F,
+  run_concentrations=T,
+  run_deposition=T,
+  run_timeseries = T,
+  run_hourly = c('PM25', 'NO2', 'SO2'),
+  run_pu=F,
+  run_calpost=F,
+  pu_templates = pu_templates,
+  calpost_templates=calpost_templates
+)
 
 #aggregated scenarios
 emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions, clustered.csv'))
