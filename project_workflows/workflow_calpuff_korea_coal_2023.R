@@ -16,7 +16,7 @@ expand_grids = '*'  # All grids are expanded (for CALMET)
 expand_ncells = -5  # Number of cells to expand met grid (e.g., for WRF data, exclusion of last 5 cells) in each direction (use negative values to crop).
 
 # project_dir="Z:/"                 # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
-project_dir="I:/koreasteel"       # calpuff_external_data-2 persistent disk (project data)
+project_dir="H:/koreasteel"       # calpuff_external_data-2 persistent disk (project data)
 
 wrf_dir <- file.path(project_dir,"calwrf") # Where calwrf data are stored 
 
@@ -27,7 +27,7 @@ input_xls <- file.path(emissions_dir,"NPS_AirPollutionStudy_Updated Data_Transla
 
 # ================================ General =====================================
 # BE CAREFUL : gis_dir/landcover/C3S-LC-L4-LCCS-Map-300m-P1Y-2018-v2.1.1.nc is CORRUPTED in the repository !! You should replace it with a good one 
-gis_dir <- "F:/gis"                         # The folder where we store general GIS data
+gis_dir <- "H:/gis"                         # The folder where we store general GIS data
 
 bc_dir  <- file.path(gis_dir, "background") # The folder with background atmospheric concentrations for O3, NH3, H2O2
 
@@ -37,7 +37,7 @@ calpuff_exe <- file.path(exe_dir,"CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe")
 pu_exe <- file.path(exe_dir,"POSTUTIL_v7.0.0_L150207/postutil_v7.0.0.exe")
 calpost_exe <- file.path(exe_dir,"CALPOST_v7.1.0_L141010/calpost_v7.1.0.exe")
 
-template_dir="F:/templates"
+template_dir="H:/templates"
 calmet_templates <- list(noobs=file.path(template_dir,"CALMET_template.INP"), 
                          surfobs=file.path(template_dir,"CALMET_surfObs_template.inp"))
 
@@ -60,7 +60,7 @@ calpost_templates <- list(concentration = file.path(template_dir, "Mintia_AllOut
 
 
 # CALMET #######################################################################
-if(!file.exists("calmet_result.RDS")) 
+if(!file.exists(file.path(output_dir, "calmet_result.RDS")))
   calmet_result <- creapuff::runCalmet(
     input_xls = input_xls,
     wrf_dir = wrf_dir,
@@ -175,6 +175,9 @@ emissions_data$Lon %<>% as.numeric()
 dom_pols = grids_to_domains(calmet_result$grids, target_crs)
 
 spdf<-to_spdf
+creapuff.env <- list()
+creapuff.env$llproj <- '+proj=longlat +datum=WGS84 +no_defs'
+
 emissions_data %>% to_spdf %>% cluster(1) -> emissions_data$loc_cluster
 
 cut_stack_params <- function(x) {
@@ -334,6 +337,13 @@ plants = emissions_clustered$emission_names %>% unique
 
 # Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, paste0('calpuff_result_',plants,'.RDS')) %>% lapply(readRDS)  
+
+calpuff_results_all %<>% lapply(function(x) {
+  x$inpfiles_created %<>% gsub('I:\\\\', 'H:\\\\', .)
+  x$out_files[,c('GEODAT', 'METDAT', 'dir')] %<>% lapply(function(col) gsub('I:\\\\', 'H:\\\\', col))
+  x
+})
+
 calpuff_results_all %>% lapply('[[', 'inpfiles_created') %>% unlist -> inpfiles_created
 names(calpuff_results_all) <- gsub(paste0('.*/','|_CALPUFF.*\\.inp'), '', inpfiles_created)  # TO DO : delete calmet_result$run_name in run name !
 names(inpfiles_created) <- names(calpuff_results_all)
@@ -442,7 +452,7 @@ runScaling <- function(x) {
     cp_run_name = x$cp_run_name,
     output_dir=output_dir,
     files_met = out_files,
-    pm10fraction=calpuff_results_all[['LCPP_IPP']]$pm10fraction,
+    pm10fraction=calpuff_results_all[['2022']]$pm10fraction,
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
@@ -464,3 +474,9 @@ runScaling <- function(x) {
 
 
 run_queue %>% lapply(runScaling)
+
+emissions_scaling$case %>% unique %>% paste0("_postutilRepartition.inp") %>% file.path(output_dir, .) -> fix_paths
+
+fix_paths %>% lapply(function(f) {
+  f %>% readLines %>% gsub('I:(\\\\|/)', 'H:\\\\', .) %>% writeLines(f)
+})
