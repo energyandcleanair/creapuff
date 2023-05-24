@@ -17,6 +17,7 @@ plot_contours <- function(calpuff_files,
                           fill_alpha_function = (function(x) x^.25*.4),
                           include_threshold_as_break=T,
                           label_sources=T,
+                          source_marker_linewidth=1, source_marker_size=1, source_marker_alpha=1,
                           source_label_color='orange',
                           output_dir='.',
                           plot_dpi=300, 
@@ -62,8 +63,11 @@ plot_contours <- function(calpuff_files,
     
     max_val <- r[] %>% max
     
-    if(!is.null(point_sources_fun)) 
-      point_sources <- point_sources_fun(calpuff_files[[i]]) %>% st_transform(plot_crs)
+    if(!is.null(point_sources_fun)) {
+      point_sources <- point_sources_fun(calpuff_files[[i]])
+      if(!is.null(point_sources)) point_sources %<>% st_transform(plot_crs)
+    }
+      
     
     #exclude the insides of area sources from color range
     if(!is.null(area_sources)) {
@@ -138,7 +142,7 @@ plot_contours <- function(calpuff_files,
         bind_cols(point_source_coords) %>% 
         st_drop_geometry()
       map_plot = map_plot + annotation_spatial(point_sources, mapping=aes(shape='modeled sources'), 
-                                               col=source_label_color, stroke=1) +
+                                               col=source_label_color, stroke=source_marker_linewidth, size=source_marker_size, alpha=source_marker_alpha) +
         scale_shape_manual(values=2, name='', guide=guide_legend(override.aes = list(linetype = 0)))
     }
     

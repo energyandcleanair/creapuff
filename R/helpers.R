@@ -1025,7 +1025,7 @@ select_receptors <- function(receptors, run_name='CALPUFF', sources, nesting_fac
   
   print(paste(run_name, sum(receptors$include), 'receptors'))
   # if(sum(receptors$include)+files_met$GridNX[1]*files_met$GridNY[1]>=10000*2) stop('too many receptors!')  # LC : *2
-  if(sum(receptors$include)>=10000) stop('too many receptors!')  # LC 
+  if(sum(receptors$include)>=10000) warning('too many receptors!')  # LC 
   
   plotadm %<>% cropProj(r)
   quickpng(file.path(output_dir, paste0(run_name, '_', 'receptors.png'))  )
