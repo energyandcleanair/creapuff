@@ -13,7 +13,7 @@ emissions_file=file.path(emissions_dir, 'MASTERLIST_Indonesia Coal (15).xlsx')
 project_dir=tapmpath('2017cases/Indonesia_JETP')
 output_dir=project_dir
 
-source('project_workflows/indonesia_iesr_read_emissions.R')
+source('project_workflows/indonesia_iesr_read_plantdata.R')
 
 emis %>% group_by(SO2_control, is_new, is_small) %>% summarise(across(c(SOx_default=SOx), median, na.rm=T)) %>% 
   mutate(across(SOx_default, ~pmin(.x, 550, na.rm=T))) ->
