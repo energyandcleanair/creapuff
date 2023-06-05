@@ -77,7 +77,7 @@ prioritize_retirement <- function(plantdata) {
 }
 
 
-retire_plants <- function(plantdata, traj) {
+retire_plants <- function(plantdata, traj, prioritize_retirement=get(prioritize_retirement, envir = globalenv())) {
   plantdata %>% 
     group_modify(function(df, group) {
       message(group)
@@ -177,6 +177,30 @@ emis_long %<>% filter(scenario=='PERPRES 112/2022') %>%
   group_by(grid) %>% 
   retire_plants(traj=traj_1.5) %>% 
   mutate(scenario='1.5 degrees') %>% 
+  bind_rows(emis_long)
+
+#add scenarios with prioritization based on age rather than health impact
+prioritize_by_age <- function(plantdata) {
+  plantdata %>% ungroup %>% distinct(CFPP.name, .keep_all=T) %>% arrange(COD, MW)
+  #plantdata %>% filter(pollutant=='SOx', year==2022) %>% select(-year) %>% arrange(emissions_t_per_GWh)
+}
+
+emis_long %<>% filter(scenario=='ACT Investment Plan') %>% 
+  mutate(eligible_for_retirement = Owner != 'captive') %>% 
+  group_by(grid) %>% 
+  retire_plants(traj=jetp_traj, prioritize_retirement = prioritize_by_age) %>% 
+  mutate(eligible_for_retirement = Owner == 'captive' & status_category=='existing') %>% 
+  retire_plants(traj=jetp_captive_traj, prioritize_retirement = prioritize_by_age) %>% 
+  mutate(year_retire = case_when(Owner=='captive' & status_category=='new' & year_retire > 2050 ~ 2050, T~year_retire)) %>% 
+  mutate(scenario='PERPRES 112/2022, age-based retirement') %>% 
+  bind_rows(emis_long)
+
+emis_long %<>% filter(scenario=='PERPRES 112/2022') %>% 
+  mutate(eligible_for_retirement = T,
+         COD = ifelse(Status %in% c('operating', 'construction') | !eligible_for_retirement, COD, Inf)) %>% 
+  group_by(grid) %>% 
+  retire_plants(traj=traj_1.5, prioritize_retirement = prioritize_by_age) %>% 
+  mutate(scenario='1.5 degrees, age-based retirement') %>% 
   bind_rows(emis_long)
 
 
@@ -295,14 +319,22 @@ emis_long %<>% filter(scenario %in% c('PERPRES 112/2022', '1.5 degrees', '1.5 de
   bind_rows(emis_long)
 
 #calculate newbuild and retrofit APC capacity
-emis_long %>% filter(grepl('APC', scenario), is.finite(retrofit_year), is.finite(COD), year_retire>2035) %>% 
-  distinct(CFPP.name, scenario, .keep_all=T) %>% 
-  group_by(scenario, is_retrofit = retrofit_year!=2026) %>% 
-  summarise(across(c(MW_fitted_w_APC=MW), sum)) %>% 
-  mutate(cost_mn_USD = MW_fitted_w_APC * ifelse(is_retrofit, 204, 152)) %>% 
-  summarise(across(where(is.numeric), sum))
+emis_long %>% 
+  filter(grepl('APC', scenario), year>=retrofit_year, year>=COD, year_retire>2035, year<=year_retire) %>% 
+  distinct(scenario, CFPP.name, year, .keep_all = T) %>%
+  #mutate(GWh = MW * base_utilization * 8.76) %>%
+  group_by(CFPP.name, scenario, is_retrofit = retrofit_year!=2026) %>% 
+  summarise(across(MW, unique), GWh=sum(GWh), years_of_operation = unique(year_retire)-unique(COD)) %>%
+  group_by(scenario, is_retrofit) %>% 
+  summarise(across(c(MW_fitted_w_APC=MW), sum),
+            GWh_w_APC_operation = sum(GWh)) %>% 
+  mutate(CAPEX_mn_USD = MW_fitted_w_APC * ifelse(is_retrofit, 148, 93)/1000,
+         OPEX_mn_USD = GWh_w_APC_operation/1000 * ifelse(is_retrofit, 1.98, 0.57),
+         APC_cost_mn_USD = CAPEX_mn_USD + OPEX_mn_USD) %>% 
+  group_by(scenario, is_retrofit) %>% 
+  summarise(across(where(is.numeric), sum)) %>% copy.xl
 
-emis_long %>% filter(scenario=='PERPRES 112/2022', year %in% c(2012,2022,2030), 
+ emis_long %>% filter(scenario=='PERPRES 112/2022', year %in% c(2012,2022,2030), 
                      COD<=year, year_retire>=year) %>% 
   group_by(pollutant, year) %>% summarise(across(emissions_t, sum)) %>% 
   mutate(change=emissions_t/lag(emissions_t)-1)
@@ -326,10 +358,10 @@ emis_long %>% group_by(scenario, year, pollutant) %>%
 #export emissions pathways
 emis_long %>% select(pollutant, scenario, Owner, grid, region, province, Latitude, Longitude, CFPP.name, MW, GEM.ID,
                      Status, COD, year_retire, year, utilization, emissions_t) %>% 
-  saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2.RDS'))
+  saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways, age-based retirement.RDS'))
 
 
-#capacity pathways
+#plot capacity pathways
 require(rcrea)
 require(ggrepel)
 
@@ -343,14 +375,14 @@ emis_long %>% ungroup %>% distinct(scenario, year, CFPP.name, .keep_all=T) %>%
   group_by(scenario, name) %>% arrange(year) %>% 
   mutate(value=zoo::rollapply(value, 3, FUN=function(x) ifelse(x[2]==0, 0, mean(x)), align='center', fill=0),
          name=ifelse(name=='MW', 'GW', 'TWh')) %>% 
-  filter(year>=2010, name=='GW') -> cap_plot
+  filter(year>=2010) -> cap_plot
 
 label_df <- cap_plot %>% group_by(scenario) %>% filter(year==min(2046, max(year[value>0])))
 
-cap_plot %>% write_csv(file.path(output_dir, 'Operating coal-fired capacity by scenario.csv')) %>% 
+cap_plot %>% #write_csv(file.path(output_dir, 'Operating coal-fired capacity by scenario.csv')) %>% 
   ggplot(aes(year, value/1e3, col=scenario)) + 
   geom_line(linewidth=1) +
-  #facet_wrap(~name, scales='free_y') +
+  facet_wrap(~name, scales='free_y') +
   theme_crea() + 
   scale_color_crea_d('dramatic', guide='none') +
   geom_label_repel(data=label_df, aes(label=str_wrap(scenario, 15)), xlim=c(2056, 2060), ylim=c(12,NA), hjust=0) +
@@ -368,7 +400,7 @@ emis_long %>%
   group_by(pollutant, scenario, year) %>% summarise(across(emissions_t, sum)) %>% ungroup %>% 
   complete(pollutant, scenario, year, fill=list(emissions_t=0)) -> emis_byyear
 
-plot_lines <- function(df, title='', guide='none', height=10) {
+plot_lines <- function(df, title='', guide='none', height=10, write_plot=T) {
   df %<>% filter(year>=2010) %>% mutate(scenario = scenario %>% gsub('Investment ', '', .) %>% gsub('excluding', 'excl.', .) %>% 
                                           gsub(' degrees', '°C', .),
                                         emissions_t = emissions_t * case_when(pollutant=='CO2'~1e-6,
@@ -390,7 +422,8 @@ plot_lines <- function(df, title='', guide='none', height=10) {
   
   if(guide=='none') p <- p + geom_text_repel(data=label_df, xlim=c(2057, 2060))
   
-  quicksave(file.path(output_dir, paste0(title, '.png')), plot=p, scale=1.33, height=height)
+  if(write_plot) { quicksave(file.path(output_dir, paste0(title, '.png')), plot=p, scale=1.33, height=height)
+  } else { p }
 }
 
 emis_byyear %>% filter(!grepl('cofiring|APC', scenario)) %>% plot_lines('Emissions by scenario')
