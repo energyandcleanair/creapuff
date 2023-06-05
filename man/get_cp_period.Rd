@@ -6,9 +6,6 @@
 \usage{
 get_cp_period(params)
 }
-\value{
-
-}
 \description{
 Post-processing
 }

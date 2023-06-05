@@ -13,9 +13,6 @@ add_missing_columns(df, columns, default_value = 0)
 
 \item{default_value}{}
 }
-\value{
-
-}
 \description{
 Add columns if missing from input dataframe
 }

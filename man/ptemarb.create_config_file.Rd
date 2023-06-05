@@ -49,9 +49,6 @@ ptemarb.create_config_file(
 
 \item{file_emission}{}
 }
-\value{
-
-}
 \description{
 Generate a config file for our python PTEMARB generator
 }

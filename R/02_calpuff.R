@@ -1,15 +1,39 @@
 
 #' Generate CALPUFF input
-#'
-#' @param wrf_dir 
+#' @param run_name Name used for the run when naming CALPUFF input and output files created by the script. Character.
+#' @param params_allgrids data.frame with the properties of all CALMET input files and domains (output by runCalmet)
+#' @param emissions_data SpatialPointsDataFrame or data.frame with emissions data for all point sources.#' 
+#' @param source_names Names for the point sources contained in emissions_data, to be used instead of the source_names column in emissions_data.
+#' @param area_sources sf MULTIPOLYGON object with area sources to be modeled. The polygons must be rectangles. Emissions are given in columns named as modeled species in CALPUFF (PPM25, PM10, PM15 etc.), in tonnes per annum. Note that the PM_tpa column can be used as there are no defaults for partitioning PM emissions from area sources.
+#' @param FGD Logical. Is each source in emissions_data equipped with flue gas desulfurization? Used for apportioning mercury if input as Hg_tpa.
+#' @param AQCS Character vector. What is the air quality control system type of each source in emissions_data? Used for apportioning mercury if input as Hg_tpa. Options are "ESP+wFGD","ESP","FF","none","CFBC".
+#' @param species_configuration "so2_nox_pm" or "so2_nox_pm_hg"
+#' @param emitted_polls Vector of pollutant names to be emitted. Chosen by default based on species_configuration.
+#' @param receptors Discrete receptors to use in the run, produced by get_recep(). Assumed to contain a logical column named "include" to mark those receptors that are actually used. Use select_receptors() to make the selection or set manually.
+#' @param bgconcs Background monthly concentrations of oxidants. Can be produced by get_bg_concs()
+#' @param o3dat = Path to hourly ozone concentrations file, if provided.
+#' @param monthly_scaling data.frame with information on monthly scaling of emissions rates for point sources. Must contain columns apply_to, pollutant, monthscaling; apply_to can include emission_names in emissions_data or "all" for all sources; pollutants are SO2, NOx, PM, Hg; monthsscaling is a comma-separated string of 12 scaling factors.
+#' @param addparams A named list of additional parameters to set in CALPUFF.INP. The name is the name of the CALPUFF.INP parameter and the value is the value of the parameter.
+#' @param addsubgroups A named list of additional subgroups to set in CALPUFF.INP. The entire subgroup is replaced by the character vector in the list. Names of list items are numbers of CALPUFF.INP subgroups, e.g. X13d for 13(d)
 #' @param output_dir 
-#' @param params_allgrids 
 #' @param gis_dir 
-#' @param calpuff_exe 
-#' @param only_make_additional_files 
-#' @param calpuff_template 
+#' @param calpuff_exe Path to CALPUFF executable, default C:/CALPUFF/CALPUFF_v7.2.1_L150618/calpuff_v7.2.1.exe
+#' @param only_make_additional_files If a CALPUFF.INP file already exists for the run_name, should it be overwritten?
+#' @param calpuff_template Template CALPUFF.INP file. Defaults to the templates in package extdata, with the appropriate one chosen based on species_configuration
 #'
-#' @return
+#' @details
+#' emissions_data can contain either the columns SO2_tpa, NOx_tpa, PM_tpa, Hg_kgpa, or columns named as modeled species (PPM25, NO etc.). The unit is tonnes per annum in either case, except kg per annum for Hg. If the _tpa columns are used, NOx, PM and NOx are apportioned to different species using default fractions.
+#' 
+#' emissions_data must contain stack height, flue gas velocity, stack diameter and flue gas exit temperature, in column names containing "Stack.height", "velocity" "Diameter" and "Temperature", respectively (case insensitive).
+#' 
+#' emissions_data must contain a source_names column, unless this is provided as a separate argument.
+#' 
+#' Flue gas temperatures must be input into CALPUFF in Kelvin. Values smaller than 273 are assumed to be in Celsius and converted, as there is no conceivable case where a buoyant point source would have flue gas temperatures below freezing.
+#' 
+#' If a data.frame is passed to emissions_data, it will be converted using creahelpers::to_spdf which requires coordinate columns starting with either "lat" and "lon" or "x" and "y"; coordinates have to be in lat-lon degrees as there is no way to pass a CRS argument.
+#'
+#' @returns Name of the CALPUFF.INP file created. The function writes out the CALPUFF.INP file, a BAT file to run CALPUFF with the .INP file, and an .RDS file with the function output.
+#' 
 #' @export
 #'
 #' @examples

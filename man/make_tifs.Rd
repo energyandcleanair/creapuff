@@ -20,9 +20,6 @@ make_tifs(
 \arguments{
 \item{...}{}
 }
-\value{
-
-}
 \description{
 Title
 }
