@@ -220,8 +220,11 @@ runCalpuff <- function(
   }  
   
   if(!is.null(area_sources)) {
-    if(!('sf' %in% class(area_source_coords)))
-      area_sources %<>% to_spdf %>% st_as_sf() %>% group_by(emission_names) %>% summarise('MULTIPOINT') %>% st_cast('POLYGON')
+    try(area_sources %<>% st_as_sf())
+    
+    if(!('sf' %in% class(area_sources)))
+      area_sources %<>% to_spdf %>% st_as_sf() %>% group_by(across(c(emission_names, any_of(emitted_polls)))) %>% 
+      summarise('MULTIPOINT') %>% st_cast('POLYGON')
     
     area_sources %<>% st_transform(crs=target_crs)
     
