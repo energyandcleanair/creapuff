@@ -1,3 +1,5 @@
+if(!exists('emission_file')) emission_file = 'indonesia_iesr_emission_pathways v2.RDS'
+
 read_csv(file.path(emissions_dir, 'emissions, clustered.csv')) -> emissions_data
 read_csv(file.path(emissions_dir, 'emissions inputs, with clustering, missing sources.csv')) -> missed_sources
 
@@ -20,7 +22,7 @@ emissions_data %>% select(emission_names, ends_with('pa')) %>%
          emitted_species=gsub('_.*', '', emitted_species)) ->
   modeled_emissions
 
-emis <- readRDS(file.path(emissions_dir, 'indonesia_iesr_emission_pathways v2.RDS')) %>%
+emis <- readRDS(file.path(emissions_dir, emission_file)) %>%
   left_join(emissions_clustering) %>% mutate(cluster=tolower(emission_names)) %>%
   group_by(Latitude, Longitude) %>% fill(cluster, .direction = 'downup')
 
