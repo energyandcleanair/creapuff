@@ -1,4 +1,34 @@
-
+#' Output contour plots of CALPUFF results
+#' @param calpuff_files Data.frame of tif rasters of CALPUFF results, returned by creapuff::get_calpuff_files. The additional columns "title" and "subtitle" are used for the plots, if provided. If "title" column is not present, creapuff::make_titletxt is used to generate titles. Can be grouped, to control faceting.
+#' @param plot_bb Latitude-longitude bounding box for the plot area. An Extent class object or other valid first argument to raster::raster().
+#' @param contour_type Either 'lines', 'filled' or 'both' (default).
+#' @param point_sources Point sources to show on the map. An sf points object or a function that returns one when given a subset of the calpuff_files data.frame as an argument. The function option is convenient when different scenarios have a different subset of modeled sources included. The column "source" is used to the sources if label_sources==TRUE.
+#' @param area_sources An sf polygons object. The area inside the polygons (e.g. a coal mine) is excluded from raster values when determining the contour levels. The column "source" is used to label area_sources if label_sources==TRUE.
+#' @param basemap Basemap for the plot. A ggmap object. If not provided, retrieved as creapuff::get_basemap(plot_bb).
+#' @param facet_by='' A column name in calpuff_files to facet the plots by. E.g. facet_by='scenario_description' will put all the maps for the same pollutant and averaging period into one plot, with different facets for the different scenarios.
+#' @param facet_ncol Number of columns in faceted plots.
+#' @param contour_breaks Either a numeric vector specifying the contour breaks, or a function that returns the breaks when provided a raster object, and accepts the arguments color_scale_basis_raster, levels_to_include and probs. Default is the creapuff::make_contour_breaks() function.
+#' @param contour_break_probs Quantiles to use when generating contour breaks. Numeric vector as in stats::quantile.
+#' @param label_contours Should contour levels be labeled on the map? Default TRUE
+#' @param label.placer=label_placer_flattest() Function to determine the places of contour level labels, passed on to metR::geom_contour2()
+#' @param skip_labels=1 number of contours to skip for labelling. E.g. skip = 1 (default) will skip 1 contour line between labels. Passed onto metR::geom_contour2().
+#' @param color_scale Color scale to use for the contour lines and fill. A vector of colors passed to colorRampPalette(). Default: rcrea::crea_palettes$change[4:7].
+#' @param color_scale_basis_scenario Name of scenario used to set contour levels for all rasters with the same pollutant and averaging period. Typically, the scenario with the highest modeled emissions. Refers to the column calpuff_files$scenario.
+#' @param fill_alpha_function Function giving the relationship between the contour variable (concentration or deposition) and the alpha of the contours. Should return the desired alpha values (0 to 1) when given a sequence of values from 0 to 1 as input, with 0 corresponding to variable value 0 and 1 to the maximum value. Default: (function(x) x^.25*.4).
+#' @param include_threshold_as_break Should the "threshold" in calpuff_files be included as a contour break? Default TRUE.
+#' @param label_sources Should labels be plotted for the point_sources and area_sources.
+#' @param source_marker_linewidth, source_marker_size, source_marker_alpha, source_label_color='orange' Parameters controlling the appearance of the source markers and labels.
+#' @param output_dir Output directory path.
+#' @param plot_dpi, plot_width, plot_height Parameters controlling the size and point size of the plot. Passed onto rcrea::quicksave().
+#'
+#' @details
+#' 
+#' @returns Nothing. Image files are written into output_dir
+#' 
+#' @export
+#'
+#' @examples
+#' 
 plot_contours <- function(calpuff_files,
                           plot_bb,
                           contour_type='both',

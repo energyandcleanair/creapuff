@@ -2,10 +2,10 @@
 % Please edit documentation in R/03_postprocessing.R
 \name{get_cp_period}
 \alias{get_cp_period}
-\title{Post-processing}
+\title{Retrieve a CALPOST processing period corresponding to a full calendar year.}
 \usage{
 get_cp_period(params)
 }
 \description{
-Post-processing
+Retrieve a CALPOST processing period corresponding to a full calendar year.
 }
