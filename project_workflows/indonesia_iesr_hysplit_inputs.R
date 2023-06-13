@@ -43,7 +43,7 @@ current_emis %>%
 
 #https://web.iitd.ac.in/~arunku/files/CEL795_Y13/AirPollutionExamples2.pdf
 #Holland's formula
-effective_release_height <- function(flue_velocity_ms,
+plume_rise <- function(flue_velocity_ms,
                                      stack_diameter_m,
                                      wind_speed_ms,
                                      pressure_kPa=101,
@@ -58,12 +58,15 @@ effective_release_height <- function(flue_velocity_ms,
 
 emis_bycluster %>% to_spdf() %>% st_as_sf() %>% st_distance(loc) -> emis_bycluster$distance_to_loc
 
-emis_bycluster %<>% mutate(release_height = Height..m. +
-                             effective_release_height(flue_velocity_ms=Velocity..m.s.,
-                                                      stack_diameter_m=Diameter..m.,
-                                                      wind_speed_ms=4,
-                                                      flue_temperature_K=Exit.Temp....+273.15,
-                                                      air_temperature_K=27))
+emis_bycluster %<>% 
+  rename(stack_height=Height..m.) %>% 
+  mutate(plume_rise = plume_rise(flue_velocity_ms=Velocity..m.s.,
+                                 stack_diameter_m=Diameter..m.,
+                                 wind_speed_ms=4,
+                                 flue_temperature_K=Exit.Temp....+273.15,
+                                 air_temperature_K=27),
+         release_height_low = stack_height + plume_rise/2,
+         release_height_high = stack_height + plume_rise*2)
 
 emis_bycluster %>% filter(distance_to_loc<units::set_units(300, 'km'),
                           distance_to_loc<units::set_units(50, 'km') | emissions_t > 2000,
@@ -77,6 +80,9 @@ ggplot(selected_clusters) +
   layer_spatial(loc, color='red')
 
 selected_clusters %>% 
-  mutate(plants=ifelse(grepl('Suralaya', plants), 'Suralaya', plants)) %>%
-  select(plants, plant_units, Latitude, Longitude, release_height, emissions_t) %>%
+  mutate(plants=ifelse(grepl('Suralaya', plants), 'Suralaya', plants),
+         across(distance_to_loc, as.vector)) %>%
+  select(plants, plant_units, distance_to_loc, Latitude, Longitude, 
+         stack_height, plume_rise, 
+         release_height_low, release_height_high, emissions_t) %>%
   write_csv(file.path(emissions_dir, 'plants_around_Jakarta_for_HYSPLIT.csv'))
