@@ -198,9 +198,10 @@ plot_contours <- function(calpuff_files,
     plot_subtitle <- unique(calpuff_files[[i]]$subtitle)
     if(plot_subtitle != '') outfilename %<>% paste(plot_subtitle)
     
-    quicksave_options %<>% c(list(file=file.path(output_dir, paste0(outfilename,'.png')), 
-                                  plot=map_plot))
-    do.call(rcrea::quicksave, quicksave_options)
+    quicksave_options %>% c(list(file=file.path(output_dir, paste0(outfilename,'.png')), 
+                                  plot=map_plot)) ->
+      quicksave_args
+    do.call(rcrea::quicksave, quicksave_args)
   }
 }
 
