@@ -19,7 +19,7 @@
 #' @param label_sources Should labels be plotted for the point_sources and area_sources.
 #' @param source_marker_linewidth, source_marker_size, source_marker_alpha, source_label_color='orange' Parameters controlling the appearance of the source markers and labels.
 #' @param output_dir Output directory path.
-#' @param plot_dpi, plot_width, plot_height Parameters controlling the size and point size of the plot. Passed onto rcrea::quicksave().
+#' @param quicksave_options Named list of parameters controlling the appearance of the plot. Passed onto rcrea::quicksave().
 #'
 #' @details
 #' 
@@ -50,8 +50,7 @@ plot_contours <- function(calpuff_files,
                           source_marker_linewidth=1, source_marker_size=1, source_marker_alpha=1,
                           source_label_color='orange',
                           output_dir='.',
-                          plot_dpi=300, 
-                          plot_width=8, plot_height=6) {
+                          quicksave_options=list(width=8, height=6, scale=1.33, logo=T)) {
   plot_crs=3857
   plot_bb_3857 = plot_bb %>% raster(crs='+init=EPSG:4326') %>% projectExtent(crs='+init=EPSG:3857') %>% 
     extent
@@ -198,8 +197,10 @@ plot_contours <- function(calpuff_files,
     outfilename <- unique(calpuff_files[[i]]$title)
     plot_subtitle <- unique(calpuff_files[[i]]$subtitle)
     if(plot_subtitle != '') outfilename %<>% paste(plot_subtitle)
-    rcrea::quicksave(file.path(output_dir, paste0(outfilename,'.png')), 
-                     plot=map_plot, width = plot_width, height = plot_height, dpi=plot_dpi)
+    
+    quicksave_options %<>% c(list(file=file.path(output_dir, paste0(outfilename,'.png')), 
+                                  plot=map_plot))
+    do.call(rcrea::quicksave, quicksave_options)
   }
 }
 
