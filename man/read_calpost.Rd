@@ -9,9 +9,6 @@ read_calpost(csvfile)
 \arguments{
 \item{csvfile}{}
 }
-\value{
-
-}
 \description{
 Title
 }

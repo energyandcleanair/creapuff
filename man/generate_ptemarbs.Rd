@@ -37,9 +37,6 @@ generate_ptemarbs(
 
 \item{utm_zone}{example: 52N}
 }
-\value{
-
-}
 \description{
 The script will generate ONE PTEMARB FILE per cluster in indicated folder.
 }

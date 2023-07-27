@@ -9,9 +9,6 @@ make_srcnam(x)
 \arguments{
 \item{x}{character vector; names of sources to shorten and make unique}
 }
-\value{
-
-}
 \description{
 Make source names valid for CALPUFF
 }

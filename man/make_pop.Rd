@@ -9,9 +9,6 @@ make_pop(grids, makeGrump = F, grumpPath = NULL)
 \arguments{
 \item{grumpPath}{}
 }
-\value{
-
-}
 \description{
 Title
 }

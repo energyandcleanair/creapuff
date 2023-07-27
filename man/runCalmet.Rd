@@ -5,16 +5,21 @@
 \title{Generate input for CALMET}
 \usage{
 runCalmet(
-  input_xls,
+  input_xls = NULL,
+  sources = NULL,
   wrf_dir,
-  expand_grids,
-  expand_ncells,
+  grid_names = NULL,
+  select_grids = "*",
+  expand_grids = "*",
+  expand_ncells = -5,
+  crop_grid = NULL,
   output_dir,
   gis_dir,
   calmet_exe,
   calmet_templates,
   only_make_additional_files = F,
   out_files = NULL,
+  boundaries_for_plotting = NULL,
   run_calmet = F
 )
 }
@@ -38,9 +43,6 @@ runCalmet(
 \item{run_calmet}{whether to actually run CALMET}
 
 \item{gis_folder}{directory where to find land cover files}
-}
-\value{
-
 }
 \description{
 Generate input for CALMET

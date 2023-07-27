@@ -6,12 +6,14 @@
 \usage{
 plot_results(
   calpuff_files,
-  scenario_names = calpuff_files$scenarioName,
-  dir = dirname(calpuff_files$path[1]),
+  scenario_names = calpuff_files$scenario_description,
+  output_dir = dirname(calpuff_files$path[1]),
   map_res = 1,
   plants = NULL,
   plant_names = NULL,
-  get_plants = function(x, ...) {     return(x) },
+  get_plants = function(x, ...) {
+     return(x)
+ },
   adm_level = 0,
   plot_km = 400,
   plot_bb = NULL,
@@ -24,12 +26,9 @@ plot_results(
 )
 }
 \arguments{
-\item{dir}{}
-
 \item{map_res}{in kilometers}
-}
-\value{
 
+\item{dir}{}
 }
 \description{
 Title

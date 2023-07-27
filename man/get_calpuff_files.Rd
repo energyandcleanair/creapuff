@@ -13,9 +13,6 @@ get_calpuff_files(ext = ".csv", gasunit = "ug", dir = ".", hg_scaling = 1)
 
 \item{map_res}{in kilometers}
 }
-\value{
-
-}
 \description{
 Build concentration (additional) dataset from CALPUF results
 }
