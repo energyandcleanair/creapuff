@@ -26,6 +26,7 @@ runPostprocessing <- function(
   nper = NULL,
   pu_start_hour = NULL,
   cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
+  pu_species = cp_species,
   cp_period_function = get_cp_period,
   run_discrete_receptors=T,
   run_gridded_receptors=T,
@@ -119,8 +120,8 @@ runPostprocessing <- function(
     #save file name for input to calpost
     totalpm.con <- pu_params[pu_params$name == 'UTLDAT', 'val']
     
-    pu_params %>% bind_rows(tibble(name='ASPECO', val=cp_species)) -> totalPM_params
-    totalPM_params %<>% rbind(tibble(name='NSPECOUT', val=length(cp_species)))
+    pu_params %>% bind_rows(tibble(name='ASPECO', val=pu_species)) -> totalPM_params
+    totalPM_params %<>% rbind(tibble(name='NSPECOUT', val=length(pu_species)))
     
     write_input(pu_templates$total_pm, 
                 file.path(output_dir, paste0(run_name_out, pu.inp.out$total_pm)),

@@ -43,7 +43,7 @@ plot_contours <- function(calpuff_files,
   if(!is.null(area_sources)) {
     gridR <- calpuff_files$path[1] %>% raster %>% raster
     area_sources %<>% st_transform(plot_crs)
-    area_sources_raster <- area_sources %>% st_transform(crs(gridR)) %>% raster::rasterize(gridR)
+    area_sources_raster <- area_sources %>% st_zm() %>% st_transform(crs(gridR)) %>% raster::rasterize(gridR)
   }
   
   if(!is_grouped_df(calpuff_files))  {
@@ -118,11 +118,12 @@ plot_contours <- function(calpuff_files,
     if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name, ncol=facet_ncol)
     
     if(!is.null(area_sources)) {
-      area_sources_df <- area_sources %>% st_centroid() %>% 
-        bind_cols(st_coordinates(.)) %>% 
-        select(-any_of(c('lon', 'lat'))) %>% st_drop_geometry() %>% rename(lon=X, lat=Y)
+      area_sources_df <- area_sources %>% st_centroid() %>% select(-any_of(c('lon', 'lat')))
       
-      map_plot = map_plot + annotation_spatial(area_sources, fill='darkgray')
+      area_sources_df %<>% st_coordinates() %>% as_tibble() %>% set_names(c('lon', 'lat')) %>% 
+        bind_cols(area_sources_df, .) %>% st_drop_geometry()
+      
+      map_plot = map_plot + annotation_spatial(area_sources, fill=source_label_color)
     }
     
     if(contour_type %in% c('filled', 'both')) map_plot = map_plot + 
