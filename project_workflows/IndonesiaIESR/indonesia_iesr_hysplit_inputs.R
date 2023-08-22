@@ -6,7 +6,7 @@ require(readxl)
 require(creahelpers)
 require(sf)
 
-source('project_workflows/read_IESR_emissions.R')
+source('project_workflows/IndonesiaIESR/read_IESR_emissions.R')
 
 emissions_dir <- 'G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
 readRDS(file.path(emissions_dir, 'indonesia_iesr_emission_pathways v2.RDS')) -> emis
@@ -15,6 +15,8 @@ c('emissions inputs, with clustering.csv', 'emissions inputs, with clustering, a
   file.path(emissions_dir, .) %>%
   lapply(read_csv) %>% bind_rows() -> stackdata
 
+
+plant_names <- read_csv(file.path(emissions_dir, 'plant_names.csv'))
 
 loc <- tibble(lon=106.8456, lat=-6.2088) %>% to_spdf() %>% st_as_sf()
 
@@ -30,7 +32,29 @@ stackdata %>% select(CFPP.name, matches(stack_regex)) %>%
 
 pm25_potential = tibble(pollutant = c('SOx', 'NOx', 'PM'),
                         pm25_potential = c(132/64, 80/46, 24/80))
+#SO4 formation 0.2 https://agupubs.onlinelibrary.wiley.com/doi/pdf/10.1029/2006JD007896
+#https://helda.helsinki.fi/server/api/core/bitstreams/e107e21f-5574-4239-8885-a45b93d8d2fc/content
+#NO3 0.35 https://www.kau.edu.sa/Files/155/Researches/59757_30334.pdf
 
+current_emis %>% 
+  left_join(plant_names) %>%
+  group_by(cluster, pollutant) %>%
+  left_join(pm25_potential) %>%
+  mutate(pm25_potential_t = pm25_potential * emissions_t) %>% 
+  summarise(across(c(emissions_t, pm25_potential_t), sum),
+            across(c(Latitude, Longitude, matches(stack_regex)), ~mean(.x, na.rm=T)),
+            plants=paste(unique(plant_name), collapse='; '),
+            plant_units=paste(CFPP.name, collapse='; ')) ->
+  emis_bycluster
+
+emis_bycluster %<>% 
+  group_by(across(-c(pollutant, emissions_t, pm25_potential_t))) %>% 
+  summarise(across(c(emissions_t, pm25_potential_t), sum)) %>% 
+  mutate(pollutant='total') %>% 
+  bind_rows(emis_bycluster)
+
+emis_bycluster %>% write_csv(file.path(emissions_dir, 'HYSPLIT emissions by pollutant.csv'))
+  
 current_emis %>% 
   left_join(plant_names) %>%
   group_by(cluster) %>%

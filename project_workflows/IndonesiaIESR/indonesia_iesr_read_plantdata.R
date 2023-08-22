@@ -16,10 +16,10 @@ emis %<>% bind_rows(captive)
 
 #add province based on coordinates
 require(sf)
-getadm(1, 'low') %>% subset(NAME_0=='Indonesia') %>% st_as_sf() -> adm1
+get_adm(1, 'low') %>% subset(NAME_0=='Indonesia') %>% st_as_sf() -> adm1
 emis %<>% 
   distinct(Latitude, Longitude) %>% 
-  spdf %>% st_as_sf() %>% 
+  to_spdf %>% st_as_sf() %>% 
   mutate(province=adm1$NAME_1[st_nearest_feature(., adm1)]) %>% 
   st_drop_geometry() %>% 
   left_join(emis %>% select(-province))
@@ -59,7 +59,7 @@ cofiring_data %>% left_join(emis, .) -> emis
 #convert units and add categories
 emis %<>% 
   mutate(
-    across(c(SOx, NOx, PM), force.numeric),
+    across(c(SOx, NOx, PM), force_numeric),
     #convert ppm
     SOx = SOx * ifelse(gas_unit=='ppm', 2.62, 1),
     NOx = NOx * ifelse(gas_unit=='ppm', 1.81, 1),

@@ -7,13 +7,15 @@ require(creapuff)
 require(creahelpers)
 require(rcrea)
 
-emissions_dir='~/../Downloads/'
-emissions_file=file.path(emissions_dir, 'MASTERLIST_Indonesia Coal (15).xlsx')
+emissions_dir='project_workflows/IndonesiaIESR/data'
+emissions_file=file.path(emissions_dir, 'MASTERLIST_Indonesia Coal.xlsx')
 
-project_dir=tapmpath('2017cases/Indonesia_JETP')
+project_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
 output_dir=project_dir
 
-source('project_workflows/indonesia_iesr_read_plantdata.R')
+gis_dir = '~/GIS'
+
+source('project_workflows/IndonesiaIESR/indonesia_iesr_read_plantdata.R')
 
 emis %>% group_by(SO2_control, is_new, is_small) %>% summarise(across(c(SOx_default=SOx), median, na.rm=T)) %>% 
   mutate(across(SOx_default, ~pmin(.x, 550, na.rm=T))) ->
@@ -328,6 +330,7 @@ emis_long %>% select(pollutant, scenario, Owner, grid, region, province, Latitud
                      Status, COD, year_retire, year, utilization, emissions_t) %>% 
   saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2.RDS'))
 
+emis_long %>% saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2, with stack data.RDS'))
 
 #capacity pathways
 require(rcrea)
@@ -425,7 +428,7 @@ require(ggspatial)
 require(ggmap)
 readLines('~/google_api_key.txt') %>% register_google()
 
-map_bb <- emis_long %>% spdf() %>% extent %>% multiply_by(1.1) %>% as.matrix() %>% as.vector
+map_bb <- emis_long %>% to_spdf() %>% extent %>% multiply_by(1.1) %>% as.matrix() %>% as.vector
 basemap <- ggmap::get_map(map_bb, zoom=4)
 emis_long %>% filter(is.finite(COD)) %>% 
   mutate(Status = case_when(Status %in% c('operating', 'construction')~Status, T~'planned')) %>% 

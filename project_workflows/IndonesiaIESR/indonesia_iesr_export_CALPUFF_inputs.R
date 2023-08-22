@@ -1,3 +1,8 @@
+project_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
+output_dir=project_dir
+
+emis_long <- readRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2, with stack data.RDS'))
+
 #export base year emissions for modeling
 stack_cols <- names(emis_long) %>% grep('Height|Diameter|Temp|Velocity', ., value=T)
 emis_long %<>%

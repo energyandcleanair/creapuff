@@ -1,3 +1,4 @@
+emissions_dir <- 'G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
 if(!exists('emission_file')) emission_file = 'indonesia_iesr_emission_pathways v2.RDS'
 
 read_csv(file.path(emissions_dir, 'emissions, clustered.csv')) -> emissions_data
@@ -54,3 +55,5 @@ emis %>% distinct(CFPP.name, Latitude, Longitude, COD) %>%
   plant_name = ifelse(grepl('Parit Baru', CFPP.name) & COD>2020, 'Parit Baru Expansion', plant_name)) %>% 
   ungroup %>% select(contains('name')) ->
   plant_names
+
+plant_names %>% write_csv(file.path(emissions_dir, 'plant_names.csv'))
