@@ -51,22 +51,23 @@ get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL, long_for
   if(!is.null(wdpa_areas)) {
     
     #WDPA database extract
-    units = ifelse(grepl('hg', names(depoR)), 'mg', 'kg')
-    
     raster::extract(depoR, wdpa_areas, sum) %>% data.frame -> protdepo
-    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
-    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
+    depoR %>% magrittr::divide_by(area(.)) %>% set_names(names(depoR)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
+    depoR %>% magrittr::divide_by(area(.)) %>% set_names(names(depoR)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
     
     if(long_format) {
-      bind_rows(protdepo %>% mutate(wdpa_area=wdpa_areas$NAME, variable='total deposition', 
-                                    across(where(is.numeric), divide_by, ifelse(units=='kg', 1e3, 1e6)),
-                                    unit=recode(units, 'mg'='kg', 'kg'='t'),
-                                    scenario=depodf$scenario, species=depodf$species),
-                protdepo_per %>% mutate(wdpa_area=wdpa_areas$NAME, variable='average deposition', unit=paste0(units, '/km2'),
-                                        scenario=depodf$scenario, species=depodf$species),
-                protdepo_maxper %>% mutate(wdpa_area=wdpa_areas$NAME, variable='maximum local deposition', unit=paste0(units, '/km2'),
-                                           scenario=depodf$scenario, species=depodf$species)) %>% 
-        pivot_longer(where(is.numeric)) ->
+      bind_rows(protdepo %>% mutate(wdpa_area=wdpa_areas$NAME, variable='total deposition'),
+                protdepo_per %>% mutate(wdpa_area=wdpa_areas$NAME, variable='average deposition'),
+                protdepo_maxper %>% mutate(wdpa_area=wdpa_areas$NAME, variable='maximum local deposition')) %>% 
+        pivot_longer(where(is.numeric)) %>% 
+        separate(name, c('species', 'scenario'), sep='_') %>% 
+        mutate(unit = case_when(species=='hg' & variable == 'total deposition' ~ 'kg',
+                                variable=='total deposition'~'t',
+                                species=='hg'~'mg/km2',
+                                T~'kg/km2'),
+               value = value * case_when(species=='hg' & variable == 'total deposition'~1e-6,
+                                         variable == 'total deposition'~1e-3,
+                                         T~1)) ->
         protdepo
     } else {
       names(protdepo) <- names(depoR) %>% paste0('_', units, '_total')
