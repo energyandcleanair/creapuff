@@ -33,15 +33,16 @@ tseries_to_rds <- function(infiles, overwrite=F) {
   return(outfiles)
 }
 
-sum_tseries_rds <- function(infiles, case_name, overwrite=F) {
+sum_tseries_rds <- function(infiles, case_name, scaling=NULL, overwrite=F) {
   outfile <- infiles[1] %>% gsub('_[^_/\\]+$', '', .) %>% paste0('_', case_name, '.RDS')
   
   if(!file.exists(outfile) | overwrite) {
     message('reading ', infiles[1])
     outdata <- readRDS(infiles[1])
     outdata$run_info$scenario <- case_name
+    outdata$concentrations$value <- 0
     
-    for(f in infiles[-1]) {
+    for(f in infiles) {
       message('reading ', f)
       indata <- readRDS(f)
       
@@ -50,6 +51,13 @@ sum_tseries_rds <- function(infiles, case_name, overwrite=F) {
                             identical(outdata$concentrations$receptor, indata$concentrations$receptor))
       
       if(!receptor_check) stop(paste("receptors and/or time stamps don't match between", infiles[i], f))
+      
+      if(!is.null(scaling)) {
+        scaling_factor=scaling$scaling[scaling$file==f]
+        message('scaling by ', scaling_factor)
+        indata$concentrations$value %<>% multiply_by(scaling_factor)
+      }
+    
       outdata$concentrations$value %<>% add(indata$concentrations$value)
     }
     
@@ -59,7 +67,8 @@ sum_tseries_rds <- function(infiles, case_name, overwrite=F) {
   return(outfile)
 }
 
-tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', output_case_name=NULL, overwrite=F) {
+tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', output_case_name=NULL, overwrite=F,
+                                  purge_memory_freq=10) {
   r <- as(grids$gridR, 'SpatRaster')
   
   for(inF in infiles) {
@@ -85,6 +94,8 @@ tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', ou
       
       point_data %<>% terra::crop(r)
       
+      rm(indata); gc()
+      
       for(i in seq_along(times)[queue]) {
         message('writing ', outfiles[i])
         if(!file.exists(outfiles[i]) | overwrite)
@@ -92,6 +103,7 @@ tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', ou
           interpNear(r, ., 'value', radius=75, interpolate=T) %>% 
           'names<-'('layer') %>% 
           writeRaster(outfiles[i], overwrite=overwrite)
+        if(i %% purge_memory_freq == 0) { message('purging memory'); gc() }
       }
     }
   }
@@ -172,22 +184,57 @@ plot_video_frames <- function(calpuff_files,
 add_quotes <- function(txt) paste0('"', txt, '"')
 
 output_video <- function(frame_files,
-                         ffmpeg_exe = "C:/ffmpeg/bin/ffmpeg.exe",
                          frame_duration_secs = 0.5,
                          output_dir='.',
-                         case_name='video') {
+                         case_name='video',
+                         crop_for_ffmpeg=F,
+                         batch_size = 10,
+                         ffmpeg_path="C:/ffmpeg/bin/") {
+  
+  old_path <- Sys.getenv("PATH")
+  if(!grepl('ffmpeg', old_path)) {
+    Sys.setenv(PATH = paste(old_path, ffmpeg_path, sep = ";"))
+    on.exit(Sys.setenv(PATH = old_path)) 
+  }
+  
+  frame_files[1] %>% get_image_dim() %>% '%%'(2) %>% equals(0) %>% all -> pixels_are_even
+  if(!pixels_are_even) {
+    if(!crop_for_ffmpeg) stop('The input files have odd number of pixels either as height or width. ffmpeg requires an even number. Set crop_for_ffmpeg=TRUE to crop automatically')
+    crop_to_even_pixels(frame_files)
+  }
+  
   output_file = file.path(output_dir, paste0(case_name,'.mp4'))
   
   message("Running python script")
+  message("Using batch size of ", batch_size, "; if you hit memory limits, decrease the value or increase available memory")
   python_exec <- reticulate::conda_python("creapuff")
-  #exec_folder <- file.path(system.file(package="creapuff"),"python")
+  
   exec_folder <- "inst/python"
   f_mainpy <- file.path(exec_folder, "run_ffmpeg.py")
-  args <- paste(add_quotes(output_file), frame_duration_secs, paste(add_quotes(frame_files), collapse=" "))
+  args <- paste(add_quotes(output_file), frame_duration_secs, batch_size, paste(add_quotes(frame_files), collapse=" "))
   
   command <- paste(add_quotes(python_exec), f_mainpy, args, sep = " ")
-  response <- system(command, intern=T) %>% paste(collapse="")
   
-  message('Running ffmpeg')
-  system(paste(add_quotes(ffmpeg_exe), response))
+  system(command, intern=T)
+}
+
+get_image_dim <- function(img) {
+  require(magick)
+  image_read(img) %>% image_attributes() %>% filter(grepl('width,height', property)) %>% use_series(value) %>% 
+    strsplit(',') %>% sapply(force_numeric)
+}
+
+crop_to_even_pixels <- function(imgs) {
+  require(magick)
+  
+  get_image_dim(imgs[1]) -> wh
+  wh %<>% divide_by(2) %>% floor %>% multiply_by(2)
+  
+  imgs %>% 
+    pbapply::pblapply(function(targetimg) {
+      message('cropping ', targetimg)
+      img <- image_read(targetimg)
+      img %<>% image_crop(geometry_area(width=wh[1], height=wh[2]))
+      image_write(img, targetimg)
+    })
 }
