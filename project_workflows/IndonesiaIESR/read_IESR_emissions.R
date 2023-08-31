@@ -1,4 +1,4 @@
-emissions_dir <- 'G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
+if(!exists('emissions_dir')) emissions_dir <- 'G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
 if(!exists('emission_file')) emission_file = 'indonesia_iesr_emission_pathways v2.RDS'
 
 read_csv(file.path(emissions_dir, 'emissions, clustered.csv')) -> emissions_data

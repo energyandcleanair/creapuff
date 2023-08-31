@@ -126,11 +126,7 @@ calpuff_files_all %>% group_by(datetime) %>%
 calpuff_files_all$path %>% gsub('\\.grd', '.grd.png', .) -> frame_files
 
 
-old_path <- Sys.getenv("PATH")
-if(!grepl('ffmpeg', old_path)) {
-  Sys.setenv(PATH = paste(old_path, "C:/ffmpeg/bin/", sep = ";"))
-  on.exit(Sys.setenv(PATH = old_path)) 
-}
+
 
 
 

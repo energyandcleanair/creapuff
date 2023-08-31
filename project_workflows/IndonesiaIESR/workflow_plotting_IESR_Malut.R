@@ -164,7 +164,7 @@ ggmap(basemap) + layer_spatial(plot_bb_polygon, fill=NA, linewidth=2, color='red
 
 color_scale_basis_scenario <- calpuff_files_all %>% filter(year==2030) %>% distinct(scenario) %>% unlist
 
-calpuff_files_all[13:15,] %>% 
+calpuff_files_all %>% 
   mutate(across(starts_with('threshold'), ~round(.x,0)),
          subtitle=force_numeric(scenario)) %>% 
   plot_contours(plot_bb=plot_bb,
@@ -180,26 +180,28 @@ calpuff_files_all[13:15,] %>%
                 #quicksave_options = list(scale=1.33))
 
 
-calpuff_files_all %>% #filter(grepl('1-3|2-3', scenario_description)) %>% 
+calpuff_files_all %>% 
   mutate(across(starts_with('threshold'), ~round(.x,0))) %>% 
   mutate(title = make_titletxt(., include_scenario=F, line_break=F),
-         subtitle_facets=force_numeric(scenario)S, 
-         subtitle='by year as more plants are commissioned') %>% 
+         subtitle_facets=force_numeric(scenario), 
+         subtitle='from North Maluku captive coal plants by year') %>% 
   group_by(period, species, type) %>% 
   #filter(cur_group_id()==1) %>% 
   plot_contours(plot_bb=plot_bb,
                 contour_type='both',
-                point_sources=plants_to_plot,
+                point_sources=point_sources_to_plot,
                 basemap=basemap,
                 facet_by='subtitle_facets',
-                facet_ncol=1,
+                #facet_ncol=1,
                 include_threshold_as_break=T,
                 label_contours = F,
                 contour_break_probs=c(0, .85,.95,.995),
                 fill_alpha_function = (function(x) x^.25*.4),
                 label_sources=F,
                 output_dir=output_dir,
-                quicksave_options = list(scale=1, logo_hjust=1, height=10))
+                ggplot_theme = theme(legend.position = 'top'),
+                contour_guide = guide_legend(nrow=1),
+                quicksave_options = list(scale=1.33, logo_hjust=1, height=6))
 
 pop <- raster(creahelpers::get_population_path("gpw_v4_population_density_adjusted_to_2015_unwpp_country_totals_rev11_2020_30_sec.tif"))
 
