@@ -57,7 +57,7 @@ calpuff_files_orig <- get_calpuff_files(ext=".tif", gasunit = 'ug', dir=input_di
                                    species=='ppm25'~'PM'),
          cluster=scenario)
 
-source('project_workflows/read_IESR_emissions.R')
+source('project_workflows/IndonesiaIESR/read_IESR_emissions.R')
 emis %<>% rename(emitted_species=pollutant)
 
 get_scaled_raster <- function(cluster_emissions, species_out) {
@@ -260,3 +260,31 @@ depo$into_protected_areas %>%
 
 
 wdpa_depo %>% filter(scenario=='mnpp') %>% group_by(variable) %>% arrange(desc(value)) %>% slice_max(value, n=5)
+
+#extract concentrations by adm2
+gis_dir<-'~/GIS/'
+adm2 <- get_adm(2, 'low') %>% subset(NAME_0=='Indonesia')
+adm2$region_index <- seq_along(adm2$NAME_2)
+
+calpuff_files_all %>% filter(grepl('BAU$|1\\.5 degrees$|captive$|2022$', emission_scenario)) %>% 
+  mutate(index=paste0('X', seq_along(path))) -> to_extract
+to_extract$path %>% stack -> r
+names(r) <- to_extract$raster_index
+
+conc_adm2 <- list()
+adm2 %>% spTransform(crs(r)) %>% rasterize(r, 'region_index') -> adm2_r
+
+raster::zonal(r, adm2_r, max, na.rm=T) -> conc_adm2
+
+conc_adm2 %>% pivot_longer(starts_with('X'), names_to='raster_index') %>% 
+  rename(region_index=zone) %>% 
+  left_join(to_extract) %>% 
+  left_join(adm2@data)
+
+conc_adm2 <- list()
+for(i in seq_along(adm2$NAME_2)) {
+  raster::extract(r, adm2[i,], max, na.rm=T) -> conc_adm2[[i]]
+  message(i)
+}
+  
+

@@ -205,6 +205,8 @@ calpuff_files_all %>%
 
 pop <- raster(creahelpers::get_population_path("gpw_v4_population_density_adjusted_to_2015_unwpp_country_totals_rev11_2020_30_sec.tif"))
 
+grids$gridR <- calpuff_files_all$path[1] %>% raster %>% raster
+
 popC <- crop(pop,grids$gridLL)
 popC[is.na(popC)] <- 0
 popC %<>% aggregate(4)
@@ -212,7 +214,8 @@ popUTM <- projectRaster(popC,crs = CRS(proj4string(grids$gridR)))
 popD_CP <- resample(popUTM,grids$gridR)
 pop <- popD_CP  * area(popD_CP)
 names(pop) <- "pop"
-pop %>% writeRaster(file.path(project_dir, 'HIA', 'population_for_hia_grid.grd'))
+
+pop %>% writeRaster(file.path(input_dir, 'population_for_grid.grd'), overwrite=T)
 
 calpuff_files_all %>% 
   filter(!is.na(threshold)) %>% 
@@ -227,7 +230,7 @@ calpuff_files_all %>%
   group_by(species, period, type) %>% 
   filter(max(pop)>0) -> exceedances
 
-exceedances %>% write_csv(file.path(project_dir, 'HIA', paste0('Cirebon_exceedances.csv')))
+exceedances %>% write_csv(file.path(output_dir, paste0('exceedances.csv')))
 
 
 
@@ -236,7 +239,7 @@ emis %>% filter(scenario=='BAU', year==2023, emitted_species=='Hg', CFPP.name %i
 
 #get WDPA protected areas
 grids_wdpa <- grids
-grids_wdpa$gridR %<>% (function(x) {crop(x, extent(x)*.33)})
+#grids_wdpa$gridR %<>% (function(x) {crop(x, extent(x)*.33)})
 get_wdpa_for_grid(grids_wdpa) -> wdpa_areas
 saveRDS(file.path(output_dir, 'WDPA areas.RDS'))
 
