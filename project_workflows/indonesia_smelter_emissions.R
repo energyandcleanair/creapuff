@@ -9,11 +9,11 @@ require(rcrea)
 
 #Pollutant inputs - nickel smelting - EIA reporting data
 #https://docs.google.com/spreadsheets/d/1corCzD9ThiryQ6rDmU-h7pCdb5nY9R60Ogd00hwg7DY/edit#gid=0
-emis_file='~/../Downloads/Pollutant inputs - nickel smelting - EIA reporting data (4).xlsx'
+emis_file='~/../Downloads/Pollutant inputs - nickel smelting - EIA reporting data (5).xlsx'
 
 #Indonesia Captive - filter for CELIOS
 #https://docs.google.com/spreadsheets/d/1LP_DmK353mFoKP19dtSAHkv_MkKqvwThDLQoxipSWT0/edit#gid=602516471
-plant_file='~/../Downloads/Indonesia Captive - filter for CELIOS (10).xlsx'
+plant_file='~/../Downloads/Indonesia Captive - filter for CELIOS (12).xlsx'
 
 output_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia-Nickel'
 
@@ -21,6 +21,7 @@ read_wide_xlsx(emis_file,
                header_row_names = c('measurement_unit', 'pollutant'),
                info_columns = c(1:6,16,18,30:40),
                fill_header_rows=F) %>% 
+  select(-Year) %>% 
   rename(O2_reference=contains('O2_adjustment'), O2_measured=contains('O2_sample'), 
          Company=contains('Company'),
          release_point=contains('Equipment'),
@@ -37,13 +38,17 @@ read_xlsx(emis_file, sheet='EF', .name_repair = make.names) %>%
                                                grepl('^g/Mg', Unit)~1e-6,
                                                grepl('mg/Mg', Unit)~1e-9,
                                                grepl('µg.*/Mg', Unit)~1e-12),
+         emissions_g_per_GJ = Value * case_when(Unit=='g/GJ'~1,
+                                                Unit=='mg/GJ'~1e-3,
+                                                Unit=='µg/GJ'~1e-6),
          Commodity = Activity %>% gsub(' production(, primary)?', '', .) %>% gsub('Aluminium', 'Aluminum', .) %>% 
-           gsub('Aluminum, secondary', 'Aluminum (secondary)', .)) %>% 
+           gsub('Aluminum, secondary', 'Aluminum (secondary)', .) %>% gsub('.*ferronickel', 'Nickel', .)) %>% 
   rename(pollutant=Pollutant) %>% 
   mutate(pollutant=recode(pollutant, SOx='SO2', TSP='PM'),
          Commodity=recode(Commodity,Aluminium='Aluminum')) %>% 
-  group_by(Commodity, pollutant) %>% 
-  filter(grepl('primary|secondary', Activity) | !any(grepl('primary', Activity))) %>% ungroup -> ef
+  group_by(Commodity, pollutant) %>% slice_max(Value, n=1) %>% 
+  filter(grepl('primary|secondary', Activity) | !any(grepl('primary', Activity))) %>% 
+  ungroup -> ef
 
 read_xlsx(plant_file, sheet='Metal smelters', .name_repair = make.names) %>% 
   rename(capacity_input_tpa=contains('Capacity.Input'),
@@ -120,7 +125,7 @@ smelters %>% separate(Commodity, paste0('Commodity__', 1:3), sep=', ') %>%
 
 #### smelter emissions
 #check that all companies in the emission data are found in the smelter list
-emis %>% anti_join(smelters_long) %>% distinct(Company)
+emis %>% filter(!is.na(fgc) | !is.na(m3_per_min)) %>% anti_join(smelters_long %>% select(Company)) %>% distinct(Company)
 
 #check that there aren't companies with multiple commodities in emission data - the script isn't designed to handle this
 smelters_long %>% group_by(Company) %>% filter(length(unique(Commodity))>1) %>% inner_join(emis %>% group_by(Company) %>% filter(!all(is.na(fgc)))) %>% distinct(Company)
@@ -138,25 +143,12 @@ emis %<>% mutate(O2_reference=na.cover(O2_reference, O2_measured),
                  Nm3_per_min=m3_per_min*(21-O2_measured/100)/(21-O2_reference/100),
                  emissions_tpa=fgc*Nm3_per_min*60*8760/1e9)
 
-emis %>% filter(emissions_tpa>0) %>% group_by(Company, Commodity, pollutant) %>% 
-  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) ->
+emis %>% filter(emissions_tpa>0) %>% 
+  group_by(Company, Commodity, pollutant) %>% 
+  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
+  left_join(smelters_long) ->
   emis_by_company
 
-#add PM speciation
-ef %>% filter(grepl('^PM', pollutant)) %>% 
-  complete(Commodity, pollutant) %>% 
-  group_by(Commodity) %>% 
-  mutate(share = Value/Value[pollutant=='PM']) %>% 
-  group_by(pollutant) %>% 
-  mutate(share = na.cover(share, mean(share, na.rm=T))) %>% 
-  select(Commodity, PM_fraction=pollutant, share) %>% mutate(pollutant='PM') -> pm_fractions
-
-pm_fractions %<>% filter(Commodity=='Nickel') %>% mutate(Commodity='NPI') %>% bind_rows(pm_fractions)
-
-emis_by_company %<>% left_join(pm_fractions) %>% 
-  mutate(across(emissions_tpa, ~.x*ifelse(pollutant=='PM', share, 1)), 
-         pollutant=na.cover(PM_fraction, pollutant)) %>% 
-  select(-PM_fraction, -share)
 
 #calculate emissions per output
 emis %>% filter(Nm3_per_min>0) %>% 
@@ -166,7 +158,8 @@ emis %>% filter(Nm3_per_min>0) %>%
            pollutant, 
            emission_type=ifelse(release_point=='CFPP', 'CFPP', 'process')) %>% 
   summarise(across(Nm3_per_t, ~sum(.x[.x>0], na.rm=T)),
-            across(fgc, ~weighted.mean(.x[.x>0], Nm3_per_min[.x>0], na.rm=T))) %>% #filter(emissions_kg_per_h>0) %>% 
+            across(fgc, ~weighted.mean(.x[.x>0], Nm3_per_min[.x>0], na.rm=T))) %>% 
+  filter(!grepl('Tsingshan|Ruipu', Company) | Commodity=='Nickel') %>% 
   group_by(Commodity, pollutant) %>% summarise(across(c(fgc, Nm3_per_t), mean), n=n()) %>% 
   mutate(emissions_t_per_t=fgc*Nm3_per_t/1e9) -> ef_measured
 
@@ -177,36 +170,42 @@ ef %>% anti_join(ef_measured %>% select(Commodity, pollutant)) %>% bind_rows(ef_
 emis_by_company %<>% inner_join(smelters_long) %>% ungroup
 
 smelters_long %>% 
-  mutate(Commodity_EF = ifelse(Commodity %in% ef_all$Commodity, Commodity, "Other metal")) %>% 
+  mutate(Commodity_EF = case_when(Commodity %in% ef_all$Commodity~Commodity, 
+                                  grepl('steel', Commodity, ignore.case=T)~"Iron & steel",
+                                  T~"Other metal")) %>% 
   left_join(ef_all %>% select(Commodity_EF=Commodity, pollutant, emissions_t_per_t)) %>% 
   mutate(emissions_tpa=emissions_t_per_t*capacity_output_tpa) %>% 
   anti_join(emis_by_company %>% ungroup %>% select(Company, pollutant)) %>% 
   bind_rows(emis_by_company) -> emis_smelter
 
+
+#add PM speciation
+ef %>% filter(grepl('^PM', pollutant)) %>% 
+  complete(Commodity, pollutant) %>% 
+  group_by(Commodity) %>% 
+  mutate(share = Value/Value[pollutant=='PM']) %>% 
+  group_by(pollutant) %>% 
+  mutate(share = na.cover(share, mean(share, na.rm=T))) %>% 
+  select(Commodity, PM_fraction=pollutant, share) %>% mutate(pollutant='PM') -> pm_fractions
+
+steel_fractions = tibble(pollutant='PM', PM_fraction=c('PM', 'PM10', 'PM2.5'), share=c(1,180/300,140/300))
+steel_fractions %>% cross_join(tibble(Commodity=c('Iron & steel', 'Steel'))) %>% bind_rows(pm_fractions) -> pm_fractions
+
+pm_fractions %<>% filter(Commodity=='Nickel') %>% mutate(Commodity='NPI') %>% bind_rows(pm_fractions)
+
+emis_smelter %<>% 
+  mutate(Commodity_for_partitioning=case_when(Commodity %in% pm_fractions$Commodity~Commodity, T~'Other metal')) %>% 
+  left_join(pm_fractions %>% rename(Commodity_for_partitioning=Commodity)) %>% 
+  mutate(across(emissions_tpa, ~.x*ifelse(pollutant=='PM', share, 1)), 
+         pollutant=na.cover(PM_fraction, pollutant)) %>% 
+  select(-PM_fraction, -Commodity_for_partitioning, -share)
+
+
+
 emis_by_company %>% group_by(pollutant) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T)))
 emis_smelter %>% filter(pollutant %in% polls) %>% group_by(Commodity, pollutant) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
   spread(pollutant, emissions_tpa)
 
-require(ggspatial); require(ggmap)
-emis_smelter %>% filter(pollutant %in% c('SO2', 'NOx', 'PM'), emissions_tpa>0) %>% to_sf_points() -> emis_smelter_sf
-gis_dir='~/GIS/'
-adm<-get_adm(0, 'coarse')
-
-map_bb <- emis_long %>% to_spdf() %>% extent %>% multiply_by(1.1) %>% as.matrix() %>% as.vector
-basemap <- ggmap::get_map(map_bb, zoom=4)
-
-ggmap(basemap) + 
-  layer_spatial(emis_sf, aes(size=emissions_t, col=Status), alpha=.5) + facet_wrap(~pollutant, ncol=1) +
-  coord_sf(xlim=map_bb[c(1,3)], ylim=map_bb[c(2,4)])
-
-ggplot() + annotation_spatial(adm, fill='white') + layer_spatial(emis_smelter_sf, aes(color=Commodity, size=emissions_tpa), alpha=.7) + 
-  facet_wrap(~pollutant, ncol=1) +
-  theme_crea() + 
-  theme(panel.grid = element_blank(), panel.background = element_rect(fill='lightblue')) +
-  scale_color_crea_d() +
-  labs(title='Air pollutant emissions from metal smelters in Indonesia',
-       size='Emissions, t/year') -> p
-quicksave(file.path(output_dir, 'emissions/smelters_map.png'), plot=p)
 
 
 
@@ -285,6 +284,10 @@ emis_pp %>%
   filter(!is.na(default_fgc)) ->
   default_fgc
 
+emis_pp %>% group_by(Company, fuel, pollutant) %>% 
+  summarise(across(fgc, ~mean(.x, na.rm=T))) %>% na.omit ->
+  emis_pp_measured
+
 #apply heat rate based on regression from GCPT
 gcpt %>% rename(Year=Start.year) %>% lm(GJ_per_MWh~Year+Combustion.technology, data=.) -> m
 summary(m)
@@ -308,7 +311,7 @@ captive_pp_all %<>% ungroup() %>%
 ef %>% filter(grepl('electricity', Activity)) %>% 
   mutate(fuel=case_when(grepl('Gaseous', Activity)~'Gas',
                         grepl('Gas Oil|Diesel', Activity)~'Diesel')) %>% 
-  select(fuel, pollutant, g_per_GJ_default=Value) ->
+  select(fuel, pollutant, g_per_GJ_default=emissions_g_per_GJ) ->
   ef_pp
 
 
@@ -316,10 +319,10 @@ ef %>% filter(grepl('electricity', Activity)) %>%
 #fgv: coal 350*(21-6)/(21-7) Nm3/GJ = 375 Nm3/GJ
 
 #link pollutant input data to captive PP data through company name
-polls=c('SO2', 'NOx', 'PM', 'Hg')
+polls=c('SO2', 'NOx', 'PM', 'PM10', 'PM2.5', 'Hg')
 
 captive_pp_all %>% cross_join(tibble(pollutant=polls)) %>% 
-  left_join(emis_pp %>% select(smelter_company=Company, fuel, pollutant, fgc) %>% na.omit) %>% 
+  left_join(emis_pp_measured %>% rename(smelter_company=Company)) %>% 
   left_join(default_fgc) %>% 
   left_join(ef_pp) %>% 
   mutate(fgc=na.cover(fgc, default_fgc),
@@ -334,71 +337,17 @@ captive_pp_all %>% cross_join(tibble(pollutant=polls)) %>%
 emis_pp_all %<>% mutate(Commodity_broad=Commodity %>% gsub('( \\(|, ).*', '', .) %>% gsub('Iron$', 'Iron & steel', .))
 emis_smelter %<>% mutate(Commodity_broad=Commodity %>% gsub('( \\(|, ).*', '', .) %>% gsub('Iron$|^Steel', 'Iron & steel', .))
 
-ggplot() + annotation_spatial(adm, fill='white') + 
-  layer_spatial(to_sf_points(emis_pp_all), aes(color=Commodity_broad, size=emissions_tpa), alpha=.7) + 
-  facet_wrap(~pollutant, ncol=1) +
-  theme_crea() + 
-  theme(panel.grid = element_blank(), panel.background = element_rect(fill='lightblue')) +
-  scale_color_crea_d('dramatic') +
-  labs(title='Air pollutant emissions',
-       subtitle='from captive power plants linked to metal smelters in Indonesia',
-       size='Emissions, t/year') -> p
-quicksave(file.path(output_dir, 'emissions/captive_pp_map.png'), plot=p)
+#add PM fractions
+emis_pp_all %<>% group_by(Tracker.ID) %>% 
+  mutate(emissions_tpa=case_when(!is.na(emissions_tpa)~emissions_tpa,
+                                 pollutant=='PM10'~emissions_tpa[pollutant=='PM']*54/80,
+                                 pollutant=='PM2.5'~emissions_tpa[pollutant=='PM']*24/80)) %>% ungroup
 
-emis_pp_all %>% filter(emissions_tpa>0) %>% 
-  group_by(fuel, Commodity_broad, pollutant) %>% 
-  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
-  ggplot(aes(Commodity_broad, emissions_tpa, fill=fuel)) + geom_col() + 
-  facet_wrap(~pollutant, scales='free_y') +
-  theme_crea() + 
-  scale_fill_crea_d('dramatic') + 
-  x_at_zero(labels=scales::comma) +
-  labs(title='Air pollutant emissions from captive power plants linked to metal smelters in Indonesia',
-       y='t/year', x='Commodity') -> p
-quicksave(file.path(output_dir, 'emissions/captive pp emissions by commodity.png'), plot=p)
 
-bind_rows(emis_pp_all %>% mutate(name='captive power'),
-          emis_smelter %>% mutate(name='process')) %>% 
-  filter(pollutant %in% polls) %>% 
-  group_by(name, Commodity_broad, pollutant) %>% 
-  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
-  ggplot(aes(Commodity_broad, emissions_tpa, fill=name)) + geom_col() + 
-  facet_wrap(~pollutant, scales='free_y') +
-  theme_crea(axis.text.x=element_text(angle=30, hjust=1)) + scale_fill_crea_d('dramatic') + 
-  x_at_zero(labels=scales::comma) +
-  labs(title='Air pollutant emissions from metal smelters and linked captive power plants in Indonesia',
-       y='t/year', x='Commodity') -> p
-quicksave(file.path(output_dir, 'emissions/smelter and captive pp emissions by commodity.png'), plot=p)
 
-bind_rows(emis_pp_all %>% mutate(name='captive power'),
-          emis_smelter %>% mutate(name='process')) %>% 
-  filter(pollutant %in% polls, emissions_tpa>0) %>% 
-  group_by(Province, Commodity_broad, pollutant) %>% 
-  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
-  ggplot(aes(Province, emissions_tpa, fill=Commodity_broad)) + geom_col() + 
-  facet_wrap(~pollutant, scales='free_x') +
-  coord_flip() +
-  theme_crea() + scale_fill_crea_d('CREA', col.index = c(1:4, 8:12)) + 
-  x_at_zero(labels=scales::comma) +
-  labs(title='Air pollutant emissions from metal smelters and linked captive power plants in Indonesia',
-       subtitle='by province',
-       y='t/year', x='Province') -> p
-quicksave(file.path(output_dir, 'emissions/smelter and captive pp emissions by province and commodity.png'), plot=p)
+bind_rows(emis_pp_all %>% mutate(type='captive power'),
+          emis_smelter %>% mutate(type='process', fuel=NA) %>% rename(Longitude=lon_smelter, Latitude=lat_smelter, smelter_company=Company)) -> emis_all
 
-bind_rows(emis_pp_all %>% mutate(name='captive power'),
-          emis_smelter %>% mutate(name='process')) %>% 
-  filter(pollutant %in% polls) %>% 
-  group_by(Province, name, pollutant) %>% 
-  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
-  ggplot(aes(Province, emissions_tpa, fill=name)) + geom_col() + 
-  facet_wrap(~pollutant, scales='free_x') +
-  coord_flip() +
-  theme_crea() + scale_fill_crea_d('dramatic') + 
-  x_at_zero(labels=scales::comma) +
-  labs(title='Air pollutant emissions from metal smelters and linked captive power plants in Indonesia',
-       subtitle='by province',
-       y='t/year', x='Province', fill='') -> p
-quicksave(file.path(output_dir, 'emissions/smelter and captive pp emissions by province.png'), plot=p)
 
 
 #pull stack characteristics data from IESR project
@@ -408,3 +357,44 @@ cfpp_emis <- readRDS(file.path(project_dir, 'indonesia_iesr_emission_pathways v2
   filter(scenario=='BAU', year==pmax(COD, 2022)) %>% 
   rename(Tracker.ID=GEM.ID)
 
+#clustering
+emis_all %>% 
+  filter(pollutant %in% polls, Province %in% c('Southeast Sulawesi', 'Central Sulawesi', 'North Maluku')) ->
+  emis_modeled
+
+emis_modeled %<>% mutate(loc_cluster=cluster(., 5))
+
+emis_modeled %>% 
+  distinct(type, loc_cluster) %>% group_by(loc_cluster) %>% 
+  summarise(type=paste(type, collapse=', ')) %>% 
+  group_by(type) %>% tally
+
+emis_modeled %>% mutate(loc_cluster=cluster(., 5)) %>% 
+  group_by(loc_cluster, pollutant) %>% 
+  summarise(across(c(type, fuel, Commodity, smelter_company),
+                   ~paste(.x %>% na.omit %>% unique(), collapse='; ')),
+            lat=mean(Latitude), lon=mean(Longitude),
+            capacity_output_tpa=sum(capacity_output_tpa),
+            MW=sum(MW, na.rm=T),
+            emissions_tpa=sum(emissions_tpa, na.rm=T)) ->
+  emis_by_cluster
+
+emis_by_cluster %<>% group_by(pollutant) %>% 
+  mutate(emissions_tpa=case_when(emissions_tpa>0~emissions_tpa, T~median(emissions_tpa[emissions_tpa>0])))
+
+emis_modeled %>% write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster.csv'))
+emis_by_cluster %>% write_csv(file.path(output_dir, 'emissions', 'emissions_by_cluster.csv'))
+
+#add default emissions for modeling for clusters where no plant has capacity data
+
+
+require(sf)
+emis_modeled %>% distinct(Longitude, Latitude) %>% to_sf_points -> locs
+
+locs %>% 
+  st_distance(cfpp_emis %>% distinct(Longitude, Latitude) %>% to_sf_points()) %>% 
+  apply(1, min) -> locs$dist_to_closest
+
+tolerance_km=5
+
+locs %>% filter(dist_to_closest<tolerance_km) %>% cluster(tolerance_km) %>% unique %>% length
