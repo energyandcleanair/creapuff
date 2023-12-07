@@ -352,8 +352,7 @@ bind_rows(emis_pp_all %>% mutate(type='captive power'),
 
 #pull stack characteristics data from IESR project
 project_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
-cfpp_emis <- readRDS(file.path(project_dir, 'indonesia_iesr_emission_pathways v2.RDS')) %>% 
-  #'indonesia_iesr_emission_pathways v2, with stack data.RDS'
+cfpp_emis <- readRDS(file.path(project_dir, 'indonesia_iesr_emission_pathways v2, with stack data.RDS')) %>% 
   filter(scenario=='BAU', year==pmax(COD, 2022)) %>% 
   rename(Tracker.ID=GEM.ID)
 
@@ -374,7 +373,7 @@ emis_modeled %>% mutate(loc_cluster=cluster(., 5)) %>%
   summarise(across(c(type, fuel, Commodity, smelter_company),
                    ~paste(.x %>% na.omit %>% unique(), collapse='; ')),
             lat=mean(Latitude), lon=mean(Longitude),
-            capacity_output_tpa=sum(capacity_output_tpa),
+            capacity_output_tpa=sum(capacity_output_tpa, na.rm=T),
             MW=sum(MW, na.rm=T),
             emissions_tpa=sum(emissions_tpa, na.rm=T)) ->
   emis_by_cluster
