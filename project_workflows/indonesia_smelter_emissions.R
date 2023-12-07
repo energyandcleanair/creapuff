@@ -6,6 +6,11 @@ require(readxl)
 require(creapuff)
 require(creahelpers)
 require(rcrea)
+require(ggmap)
+
+#pollutants to process
+polls=c('SO2', 'NOx', 'PM', 'PM10', 'PM2.5', 'Hg')
+
 
 #Pollutant inputs - nickel smelting - EIA reporting data
 #https://docs.google.com/spreadsheets/d/1corCzD9ThiryQ6rDmU-h7pCdb5nY9R60Ogd00hwg7DY/edit#gid=0
@@ -195,10 +200,15 @@ pm_fractions %<>% filter(Commodity=='Nickel') %>% mutate(Commodity='NPI') %>% bi
 
 emis_smelter %<>% 
   mutate(Commodity_for_partitioning=case_when(Commodity %in% pm_fractions$Commodity~Commodity, T~'Other metal')) %>% 
-  left_join(pm_fractions %>% rename(Commodity_for_partitioning=Commodity)) %>% 
-  mutate(across(emissions_tpa, ~.x*ifelse(pollutant=='PM', share, 1)), 
-         pollutant=na.cover(PM_fraction, pollutant)) %>% 
-  select(-PM_fraction, -Commodity_for_partitioning, -share)
+  group_by(Company, Commodity) %>% 
+  group_modify(function(df, ...) {
+    if(!('PM10' %in% df$pollutant)) df %<>% filter(pollutant=='PM') %>% mutate(pollutant='PM10', emissions_tpa=NA) %>% bind_rows(df)
+    if(!('PM2.5' %in% df$pollutant)) df %<>% filter(pollutant=='PM') %>% mutate(pollutant='PM2.5', emissions_tpa=NA) %>% bind_rows(df)
+    return(df)
+  }) %>% 
+  left_join(pm_fractions %>% select(Commodity_for_partitioning=Commodity, pollutant=PM_fraction, share)) %>% 
+  mutate(across(emissions_tpa, ~na.cover(.x, .x[pollutant=='PM']*share))) %>% 
+  select(-Commodity_for_partitioning, -share)
 
 
 
@@ -212,6 +222,14 @@ emis_smelter %>% filter(pollutant %in% polls) %>% group_by(Commodity, pollutant)
 ####Captive plants
 #
 read_xlsx(plant_file, sheet=1, .name_repair = make.names) -> captive_pp
+
+read_xlsx('~/RPackages/gcpt-analysis/data/Global-Coal-Plant-Tracker-July-2023_ChinaBriefRev.xlsx',
+          sheet='Units', .name_repair = make.names) %>% 
+  filter(Country=='Indonesia') %>% rename(Tracker.ID=matches('GEM.unit.*ID'), Plant=Plant.name) %>% 
+  mutate(GJ_per_MWh=Heat.rate..Btu.per.kWh.*1.05506/1e3) -> gcpt
+
+
+
 
 smelters %>% group_by(Company) %>% 
   group_modify(function(df, ...) {
@@ -245,10 +263,6 @@ ix <- which(!grepl('^G', smelter_data_for_captive$Tracker.ID))
 smelter_data_for_captive$Tracker.ID[ix] <- paste0('CREA', seq_along(ix))
 
 
-read_xlsx('~/RPackages/gcpt-analysis/data/Global-Coal-Plant-Tracker-July-2023_ChinaBriefRev.xlsx',
-          sheet='Units', .name_repair = make.names) %>% 
-  filter(Country=='Indonesia') %>% rename(Tracker.ID=matches('GEM.unit.*ID'), Plant=Plant.name) %>% 
-  mutate(GJ_per_MWh=Heat.rate..Btu.per.kWh.*1.05506/1e3) -> gcpt
 
 #add plants not in captive list
 captive_pp %<>% left_join(smelter_data_for_captive %>% select(Tracker.ID, smelter_company=Company))
@@ -319,7 +333,6 @@ ef %>% filter(grepl('electricity', Activity)) %>%
 #fgv: coal 350*(21-6)/(21-7) Nm3/GJ = 375 Nm3/GJ
 
 #link pollutant input data to captive PP data through company name
-polls=c('SO2', 'NOx', 'PM', 'PM10', 'PM2.5', 'Hg')
 
 captive_pp_all %>% cross_join(tibble(pollutant=polls)) %>% 
   left_join(emis_pp_measured %>% rename(smelter_company=Company)) %>% 
