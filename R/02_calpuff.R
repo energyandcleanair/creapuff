@@ -72,22 +72,11 @@ runCalpuff <- function(
   gis_dir %<>% normalizePath()
   calpuff_exe %<>% normalizePath()
   
-  params_allgrids %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% mutate(run_name=run_name) %>% 
-    mutate_at(c('DGRIDKM', 'XORIGKM', 'YORIGKM', 'NX', 'NY'), as.numeric) %>% 
-    rename(UTMZ=IUTMZN,
-           UTMH=UTMHEM,
-           GridD=DGRIDKM,
-           GridNX=NX,
-           GridNY=NY,
-           GridX=XORIGKM,
-           GridY=YORIGKM) %>% 
-    mutate(StartDate=paste(IBYR, IBMO, IBDY,IBHR) %>% ymd_h %>% format("%Y%m%d%H"),
-           EndDate=paste(IEYR, IEMO, IEDY,IEHR) %>% ymd_h %>% format("%Y%m%d%H"),
-           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> out_files
+  params_allgrids %>% calmet_result_list_to_df() -> out_files
   
   target_crs <- get_utm_proj(zone = unique(out_files$UTMZ), hem = unique(out_files$UTMH)) # LC
   
-  out_files$dir <- output_dir
+  out_files$dir <- dirname(out_files$METDAT)
   
   calpuff_dir <- dirname(calpuff_exe)
   
@@ -172,7 +161,6 @@ runCalpuff <- function(
     
     if(is.null(runsources$base.elevation..msl))
       runsources$base.elevation..msl <- get_plant_elev(runsources,
-                                                       dir=output_dir,
                                                        files_met=out_files)
     
     runsources %<>% add_missing_columns(c('SO2_tpa', 'NOx_tpa', 'PM_tpa', 'Hg_kgpa', 'downwash'))
@@ -256,8 +244,7 @@ runCalpuff <- function(
       area_sources %>% 
       st_centroid() %>% 
       as('Spatial') %>% 
-      get_plant_elev(dir=output_dir,
-                     files_met=out_files) ->
+      get_plant_elev(files_met=out_files) ->
       area_sources$base_elevation
     
     if(is.null(area_sources$emission_height)) area_sources$emission_height <- 5
