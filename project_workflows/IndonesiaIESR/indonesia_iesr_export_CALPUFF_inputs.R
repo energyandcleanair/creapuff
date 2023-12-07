@@ -57,6 +57,7 @@ emis_base %>%
   pivot_longer(all_of(stack_cols)) %>% 
   ggplot(aes(MW, value, col=SO2_control)) + geom_point() + facet_wrap(~name, scales='free_y')
 
+emis_base %>% saveRDS(file.path(output_dir, 'indonesia_iesr_base_emissions v2, with stack data.RDS'))
 
 #cluster emissions
 emis_base %>% to_spdf %>% cluster(1) -> emis_base$loc_cluster
