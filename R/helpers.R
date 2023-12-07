@@ -811,23 +811,20 @@ make_calpuff_inp <- function(files_met,
   addparams$NMETDOM = nrow(files_met)
   addparams$NMETDAT = nrow(files_met)
   
+  if(is.null(files_met$METDAT)) files_met$METDAT <- file.path(output_dir, paste0(files_met$grid_name,"_CALMET.DAT")) 
+  
+  files_met$METDAT %<>% as.character %>% gsub('//', '/', .)
+  
   if(nrow(files_met) == 1)
-    addparams$METDAT = file.path(output_dir, paste0(files_met$grid_name,"_CALMET.DAT")) %>% gsub('//', '/', .)
+    addparams$METDAT = files_met$METDAT
   
   if(is.null(files_met$grid_name)) stop('grid_name cannot be NULL')
   for(r in 1: max( nrow(files_met),5)) {  # LC
     gridLevelAvailable <- (!is.na(files_met[r,"grid_name"]) & nrow(files_met)>1)
     addparams[[paste0('DOMAIN',r)]] <-
-      ifelse(gridLevelAvailable,
-             as.character(files_met[r,"grid_name"]),
-             "not set")
+      ifelse(gridLevelAvailable, as.character(files_met[r,"grid_name"]), "not set")
     
-    addparams[[paste0('METDAT',r)]] <- 
-      ifelse(gridLevelAvailable,
-             file.path(output_dir, #files_met[r, "dir"],  # LC
-                       paste0(files_met[r,"grid_name"],"_CALMET.DAT")) %>% 
-               gsub('//', '/', .),
-             "not set")
+    addparams[[paste0('METDAT',r)]] <- ifelse(gridLevelAvailable, files_met$METDAT[r], "not set")
   }
   
   #output file names
@@ -1174,4 +1171,22 @@ get_wdpa_for_grid = function(grids) {
   grids$gridR %>% projectExtent(crs(rworldmap::countriesLow)) %>% extent %>% 
     magrittr::multiply_by(1.1) %>% as.matrix %>% creahelpers::get_wdpa() %>% 
     sp::spTransform(crs(grids$gridR))
+}
+
+
+
+
+calmet_result_list_to_df <- function(params) {
+  params %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% mutate(run_name=calmet_result$run_name) %>%
+    mutate_at(c('DGRIDKM', 'XORIGKM', 'YORIGKM', 'NX', 'NY'), as.numeric) %>%
+    rename(UTMZ=IUTMZN,
+           UTMH=UTMHEM,
+           GridD=DGRIDKM,
+           GridNX=NX,
+           GridNY=NY,
+           GridX=XORIGKM,
+           GridY=YORIGKM) %>%
+    mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
+           EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
+           TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100))
 }
