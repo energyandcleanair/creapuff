@@ -74,7 +74,13 @@ tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', ou
   for(inF in infiles) {
     name_prefix = inF %>% basename() %>% gsub('\\.RDS', '', .)
     if(!is.null(output_case_name)) name_prefix %<>% gsub('_[^_\\/]+$', '', .) %>% paste0('_', output_case_name)
-      
+    
+    subset_times=T
+    if(is.null(times)) {
+      subset_times=F
+      times <- read_times_from_rds(inF)
+    }
+    
     outfiles <- name_prefix %>% 
       paste0('_', format(times, "%Y-%m-%dZ%H%M"), '.grd') %>% 
       file.path(output_dir, .)
@@ -84,9 +90,10 @@ tseries_rds_to_raster <- function(infiles, grids, times=NULL, output_dir='.', ou
     if(any(queue)) {
       message('processing ', inF)
       indata <- readRDS(inF)
+      
       receptors <- indata$receptors %>% to_spdf(crs=crs(grids$gridR)) %>% vect
       
-      if(!is.null(times)) indata$concentrations %<>% filter(dt %in% times)
+      if(subset_times) indata$concentrations %<>% filter(dt %in% times)
       
       indata$concentrations %>% 
         merge(receptors[,'receptor'], .) ->
@@ -237,4 +244,33 @@ crop_to_even_pixels <- function(imgs) {
       img %<>% image_crop(geometry_area(width=wh[1], height=wh[2]))
       image_write(img, targetimg)
     })
+}
+
+#aggregate to monthly data
+
+average_timestep <- function(infiles, 
+                               outfiles=infiles %>% gsub('\\.RDS', '-averaged.RDS', .), 
+                               timestep='monthly', 
+                               agg_times=NULL,
+                               overwrite=F) {
+  if(grepl('month', timestep) & is.null(agg_times))
+    agg_times <- tibble(dt=times,
+                        new_dt=times %>% 'day<-'(1) %>% 'hour<-'(1))
+  
+  infiles %>% 
+    lapply(function(f) {
+      f_out <- outfiles[infiles==f]
+      
+      if(!file.exists(f_out) | overwrite) {
+        readRDS(f) -> indata
+        indata$concentrations %<>% 
+          mutate(dt=agg_times$new_dt[match(dt, agg_times$dt)]) %>% 
+          group_by(dt, receptor) %>% 
+          summarise(across(value, mean))
+        
+        indata %>% saveRDS(f_out)
+        message(f_out, ' written')
+      } else { message(f_out, ' exists, skipping') }
+    })
+  return(outfiles)
 }

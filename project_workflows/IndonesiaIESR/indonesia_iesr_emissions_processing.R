@@ -330,7 +330,10 @@ emis_long %>% select(pollutant, scenario, Owner, grid, region, province, Latitud
                      Status, COD, year_retire, year, utilization, emissions_t) %>% 
   saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2.RDS'))
 
-emis_long %>% saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2, with stack data.RDS'))
+emis_long %>% select(pollutant, scenario, Owner, grid, region, province, Latitude, Longitude, CFPP.name, MW, GEM.ID,
+                     Status, COD, year_retire, year, utilization, emissions_t,
+                     matches('Height|Velocity|Temperature|Diameter|Exit.temp'), SO2_control) %>% 
+  saveRDS(file.path(output_dir, 'indonesia_iesr_emission_pathways v2, with stack data.RDS'))
 
 #capacity pathways
 require(rcrea)
