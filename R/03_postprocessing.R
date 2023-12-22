@@ -342,8 +342,11 @@ read_postutil_params_from_calpuff_inp <- function(calpuff_inp, files_met, pu_sta
   calpuff_output_dir = dirname(params$val[params$name=='MODDAT']) %>% normalizePath()
   
   if(is.null(nper)) {
-    nper = difftime(paste(params$val[match(c('ISYR', 'ISMO', 'ISDY', 'ISHR'), params$name)], collapse = ' ') %>% ymd_h,
-                    paste(params$val[match(c('IEYR', 'IEMO', 'IEDY', 'IEHR'), params$name)], collapse = ' ') %>% ymd_h, units='hours') %>% 
+    start_time=paste(params$val[match(c('ISYR', 'ISMO', 'ISDY', 'ISHR'), params$name)], collapse = ' ') %>% ymd_h
+    #set end hour to zero - CALMET/PUFF require end hours during the night
+    end_time=paste(params$val[match(c('IEYR', 'IEMO', 'IEDY', 'ISHR'), params$name)], collapse = ' ') %>% ymd_h %>% 'hour<-'(0)
+    
+    nper = difftime(start_time, end_time, units='hours') %>% 
       as.numeric() %>% abs %>% subtract(3)
   }
   

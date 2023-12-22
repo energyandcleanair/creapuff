@@ -166,6 +166,7 @@ plot_contours <- function(calpuff_files,
     if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name, ncol=facet_ncol)
     
     if(!is.null(area_sources)) {
+      if(facet_by %in% names(area_sources)) area_sources$faceting_name <- area_sources[[facet_by]]
       area_sources_df <- area_sources %>% st_centroid() %>% select(-any_of(c('lon', 'lat')))
       
       area_sources_df %<>% st_coordinates() %>% as_tibble() %>% set_names(c('lon', 'lat')) %>% 
@@ -186,6 +187,8 @@ plot_contours <- function(calpuff_files,
       geom_contour(data=concs_df, aes(lon, lat, z=value, col=as.factor(..level..)), breaks=contour_breaks)
     
     if(!is.null(point_sources)) {
+      if(facet_by %in% names(point_sources)) point_sources$faceting_name <- point_sources[[facet_by]]
+      
       point_source_coords <- point_sources %>% st_coordinates()  %>% as_tibble %>% '['(T,1:2) %>% set_names(c('lon', 'lat'))
       point_sources_df <- point_sources %>% select(-any_of(c('lon', 'lat'))) %>% 
         bind_cols(point_source_coords) %>% 

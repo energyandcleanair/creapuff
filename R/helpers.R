@@ -696,6 +696,9 @@ make_params <- function(out_files) {
       XORIGKM=out_files$GridX,
       YORIGKM=out_files$GridY)
   
+  if(is.na(as.numeric(paramlist$IBHR)+as.numeric(paramlist$IBHR))) 
+    stop('cannot retrieve start and end hour from outfiles$StartDate and outfiles$EndDate')
+  
   set_param(name=paramlist)
 }
 
@@ -1186,7 +1189,7 @@ calmet_result_list_to_df <- function(params) {
            GridNY=NY,
            GridX=XORIGKM,
            GridY=YORIGKM) %>%
-    mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
-           EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
+    mutate(StartDate=paste(IBYR, IBMO, IBDY, IBHR) %>% ymd_h() %>% format("%Y%m%d%H"),
+           EndDate=paste(IEYR, IEMO, IEDY, IEHR) %>% ymd_h() %>% format("%Y%m%d%H"),
            TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100))
 }
