@@ -66,8 +66,11 @@ calmet_result <- readRDS(file.path(met_dir,"calpuff_suite","calmet_result.RDS" )
 # Define target_crs
 
 
+#set end of run to Jan 2 - the "spin-down" period afterwards is unnecessary
+calmet_result$params %<>% lapply(function(x) { x$IEDY <- 2; x$IEHR <- 1; x })
 
 calmet_result$params %>% calmet_result_list_to_df -> out_files
+
 target_crs <- get_utm_proj(zone = unique(out_files$UTMZ), hem = unique(out_files$UTMH))
 
 
@@ -258,8 +261,6 @@ get_cp_period <- function(params) {
 }
 
 for (plant in plants) {
-  scenario_prefix <- plant
-  
   # ---
   calpuff_results_all[names(calpuff_results_all) == plant]  -> calpuff_results_case
   inpfiles_created[names(inpfiles_created) == plant]  -> inpfiles_created_case
@@ -269,23 +270,16 @@ for (plant in plants) {
   # 1. Create "SUMRUNS" INP files for summing up all CALPUFF outputs for each station, for :
   # - concentrations (.CON), no need for nitrate reparation (MNITRATE = 0), a further run will do the repartition
   # - deposition (.DRY, .WET) (together with acid, mercury, dust species)
-  files_met <- out_files  # or calpuff_results_all[[1]]$out_files  # All clusters have the same meteo
-  first_cluster_inp <- inpfiles_created_case[1]
-  first_cluster_name <- names(inpfiles_created_case)[1]
   
   if(!is.null(calpuff_results_case[[1]][['pm10fraction']]))
     calpuff_results_case %>% lapply('[[', 'pm10fraction') %>% unlist %>% mean() -> pm10fraction 
   
-  # Generate "generic" PU and CP INP files (only for the first cluster, run_pu=F, run_calpost=F)
-  creapuff::runPostprocessing(
-    calpuff_inp=first_cluster_inp,
-    cp_run_name=names(first_cluster_inp),
+  runPostprocessing(
+    calpuff_inp=inpfiles_created_case[1],
+    cp_run_name=names(inpfiles_created_case),
     output_dir=output_dir,
-    files_met = files_met,
+    files_met = out_files,
     pm10fraction=pm10fraction,
-    METRUN = 0,  
-    nper = NULL,
-    pu_start_hour = NULL,
     cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2', 'SO4', 'NO3', 'PPM25'),
     cp_period_function = get_cp_period,
     run_discrete_receptors=T,
@@ -302,7 +296,7 @@ for (plant in plants) {
 }
 
 #write out bat files to run in batches
-queue %>% split(1:4) -> batches
+queue %>% split(1:6) -> batches
 for(i in seq_along(batches)) {
   paste0('pu_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> pu_lines
   paste0('calpost_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> cp_lines
@@ -315,67 +309,61 @@ for(i in seq_along(batches)) {
     writeLines(file.path(output_dir, paste0('batch_', i, '.bat')))
 }
 
-#aggregated total of all runs
-pm10fraction_mean = calpuff_results_all %>% lapply('[[', 'pm10fraction') %>% unlist %>% mean
-runPostprocessing(
-  calpuff_inp=inpfiles_created[[1]],
-  run_name = plants[1:99],
-  run_name_out = 'baseall1',
-  cp_run_name = 'baseall1',
-  output_dir=output_dir,
-  files_met = out_files,
-  pm10fraction=pm10fraction_mean,
-  METRUN = 0,  
-  nper = NULL,
-  pu_start_hour = NULL,
-  cp_species = c('PM25', 'TPM10', 'TSP', 'SO2', 'NO2'),
-  cp_period_function = get_cp_period,
-  run_discrete_receptors=T,
-  run_gridded_receptors=F,
-  run_concentrations=T,
-  run_deposition=T,
-  run_timeseries = T,
-  run_hourly = c('PM25', 'NO2', 'SO2'),
-  run_pu=F,
-  run_calpost=F,
-  pu_templates = pu_templates,
-  calpost_templates=calpost_templates
-)
+
 
 #aggregated scenarios
-emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions, clustered.csv'))
+emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions_with_cluster v2.csv'))
+emissions_data %>% ungroup %>% select(emission_names, ends_with("tpa")) %>% 
+  pivot_longer(-emission_names, names_to='pollutant', values_to='emissions_tpa_modeled') %>% 
+  mutate(pollutant=gsub('_.*', '', pollutant)) ->
+  emissions_modeled
 
-emissions_clustered_all %>% group_by(cluster) %>% 
-  mutate(across(ends_with("pa"), ~.x/.x[case=='2022'])) ->
-  emissions_scaling
+emissions_scaling <- list()
 
+for(yr in c(2015, 2020, 2025, 2030)) {
+  case=paste0('all_', yr)
+  emissions_clustered_all %>% 
+    filter(Year<yr) %>% 
+    mutate(emission_names=paste0('IDsme', loc_cluster, 'M')) %>% 
+    group_by(emission_names, pollutant) %>% 
+    summarise(across(emissions_tpa, ~sum(.x,na.rm=T))) %>% 
+    left_join(emissions_modeled %>% filter(grepl('M$', emission_names))) %>% 
+    mutate(scaling=emissions_tpa/emissions_tpa_modeled,
+           case=case) %>% 
+    select(-contains('tpa')) %>% spread(pollutant, scaling) ->
+    emissions_scaling[[case]]
+}
 
-emissions_scaling %>% 
+emissions_scaling %>% bind_rows() %>% 
   group_by(case) %>% 
   group_map(function(df, group) {
-    scaling_case <- emissions_scaling %>% ungroup %>% filter(case==group$case) %>% 
-      select(emission_names, pm=PM_tpa, so2=SOx_tpa, nox=NOx_tpa, hg=Hg_tpa) %>% 
+    scaling_case <- df %>% 
+      select(emission_names, pm=PM2.5, so2=SO2, nox=NOx, hg=Hg) %>% 
       split(f=.$emission_names) %>% 
       lapply(select, -emission_names)
     
-    if(group$case=='2022') scaling_case <- NULL
-    
     list(run_name_out=group$case,
          run_name=df$emission_names,
-         cp_run_name = group$case,
-         emissions_scaling = scaling_case)
+         cp_run_name = group$case %>% gsub('_', '', .),
+         emissions_scaling = scaling_case,
+         run_timeseries=group$case=='all_2030')
   }) -> run_queue
+
 
 runScaling <- function(x) {
   message(x$run_name_out)
+  
+  run_hourly <- c('SO2', 'NO2')
+  if(x$run_timeseries) run_hourly %<>% c('PM25')
+  
   runPostprocessing(
-    calpuff_inp=inpfiles_created[[1]],
+    calpuff_inp=inpfiles_created[[x$run_name[1]]],
     run_name = x$run_name,
     run_name_out = x$run_name_out,
     cp_run_name = x$cp_run_name,
     output_dir=output_dir,
     files_met = out_files,
-    pm10fraction=calpuff_results_all[['LCPP_IPP']]$pm10fraction,
+    pm10fraction=calpuff_results_all[['LCPP_IPP']]$pm10fraction,#!!!
     METRUN = 0,  
     nper = NULL,
     pu_start_hour = NULL,
@@ -385,8 +373,8 @@ runScaling <- function(x) {
     run_gridded_receptors=F,
     run_concentrations=T,
     run_deposition=T,
-    run_timeseries = F,
-    run_hourly = c('SO2', 'NO2'), #c('PM25', 'NO2', 'SO2'),
+    run_timeseries = x$run_timeseries,
+    run_hourly = run_hourly, #c('PM25', 'NO2', 'SO2'),
     emissions_scaling = x$emissions_scaling,
     run_pu=F,
     run_calpost=F,
