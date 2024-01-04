@@ -43,9 +43,9 @@ Depends:
     ncdf4,
     ggplot2,
     creahelpers,
-    metR
+    metR,
+    plotKML
 Suggests:
-    plotKML,
     knitr,
     testthat(>= 2.1.0)
 VignetteBuilder:
