@@ -5,15 +5,19 @@ import shutil
 import sys
 
 # Check if the correct number of arguments are provided
-if len(sys.argv) < 4:
-    print("Usage: python run_ffmpeg.py output_file image_duration batch_size image_files")
+if len(sys.argv) < 5:
+    print("Usage: python run_ffmpeg.py output_file image_duration batch_size image_file_paths")
     sys.exit(1)
 
 
 final_output_file = sys.argv[1]
 image_duration = float(sys.argv[2])
 batch_size = int(sys.argv[3]) # Batch size (number of images per video)
-image_files = sys.argv[4:]
+image_file_paths = sys.argv[4]
+
+with open(image_file_paths, "r") as file:
+    paths = file.read().splitlines()
+image_files = paths
 
 # create output folder for batched videos
 output_folder = 'output_videos'
