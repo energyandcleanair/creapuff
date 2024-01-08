@@ -147,11 +147,13 @@ plot_video_frames <- function(calpuff_files,
                               basemap=get_basemap(plot_bb), 
                               contour_breaks=NULL, 
                               contour_break_probs=c(0,.8,.99),
+                              highest_contour=(function(x) quantile(x, .75)),
                               contour_type='filled', 
                               label_contours=F, 
                               color_scale=c(crea_palettes$change[4:7], 'black'),
                               fill_alpha_function = (function(x) x^.7*1),
                               label_sources=F,
+                              times_to_plot=NULL,
                               ...) {
   if(is.null(contour_breaks)) {
     calpuff_files$path %>% sapply(function(x) x %>% raster %>% values %>% max(na.rm=T)) -> maxvals
@@ -161,16 +163,22 @@ plot_video_frames <- function(calpuff_files,
     
     plot_bb_in_input_crs <- projectRaster(raster(plot_bb, crs=creapuff.env$llproj), crs=break_basis_raster)
     
+    if(is.function(highest_contour)) highest_contour <- highest_contour(maxvals)
+    
     break_basis_raster %>% 
       crop(plot_bb_in_input_crs) %>% 
-      make_contour_breaks(probs=contour_break_probs) %>% 
-      (function(x) c(x, pretty(c(last(x), quantile(maxvals, .75))))) %>% 
+      make_contour_breaks(probs=contour_break_probs) -> contour_breaks
+    
+    if(last(contour_breaks)<highest_contour) contour_breaks %<>% c(pretty(c(last(contour_breaks), highest_contour)))
+    
+    contour_breaks %<>% 
       signif(2) %>% 
       unique %>% 
-      subset(.>0) %>% sort -> contour_breaks
+      subset(.>0) %>% sort
   }
   
   if(is.null(calpuff_files$plot_filename)) calpuff_files %<>% mutate(plot_filename=name)
+  if(!is.null(times_to_plot)) calpuff_files %<>% filter(datetime %in% times_to_plot)
   
   calpuff_files %>% group_by(datetime) %>% 
     plot_contours(plot_bb=plot_bb,
