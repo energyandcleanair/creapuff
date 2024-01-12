@@ -14,6 +14,8 @@ library(creapuff)
 require(rcrea)
 require(creahelpers)
 
+load(file.path(project_dir, 'CALPUFF_setup.RData'))
+
 project_dir="G:/Indonesia_smelters"       # calpuff_external_data-2 persistent disk (project data)
 input_dir <- file.path(project_dir,"calpuff_suite") # Where to read all CALPUFF generated files
 met_dir <- "G:/IndonesiaIESR" # Where to read all CALPUFF generated files
@@ -24,7 +26,6 @@ plants <- read_csv(file.path(emissions_dir, 'emissions_with_cluster.csv'))
 
 
 
-load(file.path(project_dir, 'CALPUFF_setup.RData'))
 
 gis_dir <- "H:/GIS"                         # The folder where we store general GIS data
 
@@ -44,14 +45,15 @@ grids$gridR %<>% crop(plot_bb)
 #make tifs
 scenarios_to_plot=calpuff_files$scenario %>% unique %>% grep('^all', ., value=T)
 calpuff_files %<>% filter(scenario %in% scenarios_to_plot, 
-                          species %in% c('so2', 'no2', 'pm25'), !is.na(threshold) | period=='annual')
+                          species %in% c('so2', 'no2', 'pm25', 'hg', 'pm'), !is.na(threshold) | period=='annual')
 
-calpuff_files %>% make_tifs(grids=grids, overwrite = F)
+calpuff_files %>% data.frame %>% make_tifs(grids=grids, overwrite = F)
 
 # Select tif data 
 calpuff_files_all <- get_calpuff_files(ext=".tif$", gasunit = 'ug', dir=input_dir, hg_scaling=1e-3) %>% 
   filter(scenario %in% scenarios_to_plot) %>% 
-  mutate(scenario_description='all smelters and captive power plants') %>% 
+  mutate(scenario_description='all smelters and captive power plants',
+         speciesName=recode(speciesName, 'fly ash'='toxic particle')) %>% 
   mutate(title=make_titletxt(., line_break = F), year=force_numeric(scenario))
 
 
@@ -93,12 +95,13 @@ color_scale_basis_scenario <- calpuff_files_all %>% #filter(year==2030) %>%
 
 year_to_plot=2030
 
-calpuff_files_all %>% filter(year==year_to_plot) %>% 
+
+calpuff_files_all %>% filter(year==year_to_plot) %>% #, type=='deposition', species=='pm') %>% 
   mutate(across(starts_with('threshold'), ~round(.x,0)),
          subtitle="") %>% 
   plot_contours(plot_bb=plot_bb,
                 contour_type='both',
-                color_scale_basis_scenario=color_scale_basis_scenario,
+                #color_scale_basis_scenario=color_scale_basis_scenario,
                 point_sources=point_sources_to_plot %>% filter(year==year_to_plot),
                 basemap=basemap,
                 label_contours=F,
@@ -115,6 +118,7 @@ calpuff_files_all %>%
          subtitle_facets=year, 
          subtitle='attributed to smelters and associated captive power plants, by year') %>% 
   group_by(period, species, type) %>% 
+  filter(type=='deposition') %>% 
   #filter(cur_group_id()==1) %>% 
   plot_contours(plot_bb=plot_bb,
                 contour_type='both',
@@ -145,6 +149,7 @@ pop <- popD_CP  * area(popD_CP)
 names(pop) <- "pop"
 
 pop %>% writeRaster(file.path(input_dir, 'population_for_grid.grd'), overwrite=T)
+pop <- raster(file.path(input_dir, 'population_for_grid.grd'))
 
 calpuff_files_all %>% 
   filter(!is.na(threshold)) %>% 
@@ -159,30 +164,24 @@ calpuff_files_all %>%
   group_by(species, period, type) %>% 
   filter(max(pop)>0) -> exceedances
 
-exceedances %>% write_csv(file.path(output_dir, paste0('exceedances.csv')))
+exceedances %>% write_csv(file.path(output_dir, 'exceedances.csv'))
 
 
 
 # ==============================================================================
-emis %>% filter(scenario=='BAU', year==2023, emitted_species=='Hg', CFPP.name %in% unlist(cases$units))
 
 #get WDPA protected areas
 grids_wdpa <- grids
 #grids_wdpa$gridR %<>% (function(x) {crop(x, extent(x)*.33)})
 get_wdpa_for_grid(grids_wdpa) -> wdpa_areas
-saveRDS(file.path(output_dir, 'WDPA areas.RDS'))
+wdpa_areas %>% saveRDS(file.path(output_dir, 'WDPA areas.RDS'))
+wdpa_areas <- readRDS(file.path(output_dir, 'WDPA areas.RDS'))
 
 #output deposition results
 calpuff_files_all %>% get_deposition_results(dir=output_dir, wdpa_areas=wdpa_areas) -> depo
 
-depo$by_landuse %>% filter(broad.cat != 'ocean') %>% group_by(pollutant, scenario, unit) %>% summarise(across(deposition, sum))
-depo$into_protected_areas %>% 
-  rename(wdpa_area=name) %>% 
-  pivot_longer(-wdpa_area) %>% 
-  mutate(species = name %>% gsub('_.*', '', .),
-         variable = name %>% gsub('.*_', '', .),
-         scenario = name %>% gsub('^[a-z]*_', '', .) %>% gsub('_.*', '', .)) ->
-  wdpa_depo
+depo$by_landuse %>% filter(broad.cat != 'ocean') %>% group_by(pollutant, scenario, unit) %>% summarise(across(deposition, sum)) %>% 
+  write_csv(file.path(output_dir, 'total deposition onto land and freshwater.csv'))
 
-
-wdpa_depo %>% filter(scenario=='mnpp') %>% group_by(variable) %>% arrange(desc(value)) %>% slice_max(value, n=5)
+depo$into_protected_areas %>% filter(scenario=='all2030') %>% group_by(variable, species) %>% arrange(desc(value)) %>% slice_max(value, n=5) %>% 
+  write_csv(file.path(output_dir, 'protected areas most affected by deposition.csv'))
