@@ -51,9 +51,9 @@ get_deposition_results <- function(calpuff_files, dir, wdpa_areas=NULL, long_for
   if(!is.null(wdpa_areas)) {
     
     #WDPA database extract
-    raster::extract(depoR, wdpa_areas, sum) %>% data.frame -> protdepo
-    depoR %>% magrittr::divide_by(area(.)) %>% set_names(names(depoR)) %>% raster::extract(wdpa_areas, mean) %>% data.frame -> protdepo_per
-    depoR %>% magrittr::divide_by(area(.)) %>% set_names(names(depoR)) %>% raster::extract(wdpa_areas, max) %>% data.frame -> protdepo_maxper
+    raster::extract(depoR, wdpa_areas, sum) %>% data.frame %>% set_names(names(depoR)) -> protdepo
+    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, mean) %>% data.frame %>% set_names(names(depoR))  -> protdepo_per
+    depoR %>% magrittr::divide_by(area(.)) %>% raster::extract(wdpa_areas, max) %>% data.frame %>% set_names(names(depoR))  -> protdepo_maxper
     
     if(long_format) {
       bind_rows(protdepo %>% mutate(wdpa_area=wdpa_areas$NAME, variable='total deposition'),
