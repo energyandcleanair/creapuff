@@ -151,7 +151,7 @@ emis %<>% mutate(O2_reference=na.cover(O2_reference, O2_measured),
 emis %>% filter(emissions_tpa>0) %>% 
   group_by(Company, Commodity, pollutant) %>% 
   summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
-  left_join(smelters_long) ->
+  left_join(smelters_long) %>% ungroup %>% mutate(release_height='m') ->
   emis_by_company
 
 
@@ -170,15 +170,19 @@ emis %>% filter(Nm3_per_min>0) %>%
 
 
 ###add emissions factors
-ef %>% anti_join(ef_measured %>% select(Commodity, pollutant)) %>% bind_rows(ef_measured) -> ef_all
+ef %>% anti_join(ef_measured %>% select(Commodity, pollutant)) %>% bind_rows(ef_measured) %>% 
+  mutate(release_height='m') %>% 
+  bind_rows(tibble(Commodity='Nickel', emissions_t_per_t=c(0.5184, 0.34867, 0.34867*.25)/1e3, pollutant=c('PM', 'PM10', 'PM2.5'),
+                   release_height='l', Source="Environment Australia",
+                   Reference="Emission Estimation Technique Manual for Nickel Concentrating, Smelting and Refining. Table 3 - Emission Factors for Dust Generation"))-> 
+  ef_all
 
-emis_by_company %<>% inner_join(smelters_long) %>% ungroup
 
 smelters_long %>% 
   mutate(Commodity_EF = case_when(Commodity %in% ef_all$Commodity~Commodity, 
                                   grepl('steel', Commodity, ignore.case=T)~"Iron & steel",
                                   T~"Other metal")) %>% 
-  left_join(ef_all %>% select(Commodity_EF=Commodity, pollutant, emissions_t_per_t)) %>% 
+  left_join(ef_all %>% select(Commodity_EF=Commodity, pollutant, release_height, emissions_t_per_t)) %>% 
   mutate(emissions_tpa=emissions_t_per_t*capacity_output_tpa) %>% 
   anti_join(emis_by_company %>% ungroup %>% select(Company, pollutant)) %>% 
   bind_rows(emis_by_company) -> emis_smelter
@@ -200,7 +204,7 @@ pm_fractions %<>% filter(Commodity=='Nickel') %>% mutate(Commodity='NPI') %>% bi
 
 emis_smelter %<>% 
   mutate(Commodity_for_partitioning=case_when(Commodity %in% pm_fractions$Commodity~Commodity, T~'Other metal')) %>% 
-  group_by(Company, Commodity) %>% 
+  group_by(Company, Commodity, release_height) %>% 
   group_modify(function(df, ...) {
     if(!('PM10' %in% df$pollutant)) df %<>% filter(pollutant=='PM') %>% mutate(pollutant='PM10', emissions_tpa=NA) %>% bind_rows(df)
     if(!('PM2.5' %in% df$pollutant)) df %<>% filter(pollutant=='PM') %>% mutate(pollutant='PM2.5', emissions_tpa=NA) %>% bind_rows(df)
@@ -213,7 +217,8 @@ emis_smelter %<>%
 
 
 emis_by_company %>% group_by(pollutant) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T)))
-emis_smelter %>% filter(pollutant %in% polls) %>% group_by(Commodity, pollutant) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
+emis_smelter %>% filter(pollutant %in% polls) %>% group_by(Commodity, pollutant, release_height) %>% 
+  summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
   spread(pollutant, emissions_tpa)
 
 
@@ -244,25 +249,41 @@ smelter_data_for_captive %<>% left_join(gcpt %>% select(Tracker.ID, MW=Capacity.
                       grepl('MW', Tracker.ID)~force_numeric(Tracker.ID),
                       T~ifelse(fuel=='Coal', Capacity..MW., Capacity_2..MW.)))
 
-smelter_data_for_captive %<>% filter(!is.na(MW))
-
+###add "imputed" coal capacity for smelters lacking information on captive capacity
+#mean capacity at smelters with data
 smelter_data_for_captive %>% group_by(Commodity, Company) %>% 
   summarise(across(MW, sum), across(capacity_output_tpa__1, unique)) %>% 
   mutate(MW_per_tpa=MW/capacity_output_tpa__1) %>% 
   summarise(across(MW_per_tpa, mean, na.rm=T)) %>% 
-  filter(Commodity=='Nickel') -> MW_per_tpa
+  filter(Commodity %in% c('Nickel', 'Iron & steel')) -> MW_per_tpa
 
 
-ix <- which(is.na(smelter_data_for_captive$MW) & 
-              grepl('Nickel', smelter_data_for_captive$Commodity) &
-              (!is.na(smelter_data_for_captive$PLN.or.Captive.CFPP) | !is.na(smelter_data_for_captive$Captive_non.coal)) & 
-              (smelter_data_for_captive$PLN.or.Captive.CFPP!='PLN' | is.na(smelter_data_for_captive$PLN.or.Captive.CFPP)))
-smelter_data_for_captive$MW[ix] <- smelter_data_for_captive$capacity_output_tpa__1[ix] * MW_per_tpa$MW_per_tpa
+ix <- (is.na(smelter_data_for_captive$MW) & 
+         !(smelter_data_for_captive$Related.Industrial.Parks.or.Captive.Plants %eqna% "IMIP") &
+         !(smelter_data_for_captive$PLN.or.Captive.CFPP %eqna% 'PLN'))
+
+smelter_data_for_captive %<>% left_join(MW_per_tpa)
+smelter_data_for_captive$MW[ix] <- smelter_data_for_captive$capacity_output_tpa__1[ix] * smelter_data_for_captive$MW_per_tpa[ix]
+smelter_data_for_captive$coal_MW[ix] <- smelter_data_for_captive$MW[ix]
+smelter_data_for_captive %<>% ungroup %>% 
+  mutate(basis_for_captive_capacity = case_when(PLN.or.Captive.CFPP=="PLN"~"reported to buy from PLN",
+                                                Related.Industrial.Parks.or.Captive.Plants =="IMIP" & is.na(MW)~"assume linkage to existing capacity in IMIP", 
+                                                !ix~"reported", 
+                                                T~"estimated based on metal production capacity"))
 
 ix <- which(!grepl('^G', smelter_data_for_captive$Tracker.ID))
 smelter_data_for_captive$Tracker.ID[ix] <- paste0('CREA', seq_along(ix))
 
 
+smelter_data_for_captive %>% 
+  filter(Province %in% c('Southeast Sulawesi', 'Central Sulawesi', 'North Maluku'), Company!="Vale Indonesia (Pomalaa)") %>% 
+  rowwise %>% 
+  mutate(power_sources = c(PLN.or.Captive.CFPP, Captive_non.coal) %>% na.omit %>% paste(collapse='; ')) %>% 
+  select(Tracker.ID, Company, Province, Commodity, matches('capacity_output|Commodity.detailed'), 
+         Related.Industrial.Parks.or.Captive.Plants,
+         power_sources,
+         contains("_MW"), diesel_as_backup_only, basis_for_captive_capacity) %>% 
+  write_csv(file.path(output_dir, "captive power overview.csv"))
 
 #add plants not in captive list
 captive_pp %<>% left_join(smelter_data_for_captive %>% select(Tracker.ID, smelter_company=Company))
