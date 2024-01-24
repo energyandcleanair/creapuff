@@ -14,11 +14,11 @@ polls=c('SO2', 'NOx', 'PM', 'PM10', 'PM2.5', 'Hg')
 
 #Pollutant inputs - nickel smelting - EIA reporting data
 #https://docs.google.com/spreadsheets/d/1corCzD9ThiryQ6rDmU-h7pCdb5nY9R60Ogd00hwg7DY/edit#gid=0
-emis_file='~/../Downloads/Pollutant inputs - nickel smelting - EIA reporting data (5).xlsx'
+emis_file='~/../Downloads/Pollutant inputs - nickel smelting - EIA reporting data (6).xlsx'
 
 #Indonesia Captive - filter for CELIOS
 #https://docs.google.com/spreadsheets/d/1LP_DmK353mFoKP19dtSAHkv_MkKqvwThDLQoxipSWT0/edit#gid=602516471
-plant_file='~/../Downloads/Indonesia Captive - filter for CELIOS (12).xlsx'
+plant_file='~/../Downloads/Indonesia Captive - filter for CELIOS (13).xlsx'
 
 output_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia-Nickel'
 
@@ -403,5 +403,15 @@ clusters %>% to_sf_points %>%
   st_distance(emis_modeled %>% to_sf_points()) %>% 
   apply(2, function(x) clusters$loc_cluster[x==min(x)]) -> emis_modeled$loc_cluster
 
+emis_modeled %<>% mutate(Year=na.cover(Year, quantile(Year, .75, na.rm=T)))
+
 emis_modeled %>% mutate(Year=na.cover(Year, quantile(Year, .75, na.rm=T))) %>% 
-  write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster v2.csv'))
+  write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv'))
+
+
+emis_modeled %>% mutate(emissions_tpa=case_when(type=='process' & grepl('^PM', pollutant)~.05,
+                                                type=="captive power" & pollutant=='SO2'~.15,
+                                                type=="captive power" & pollutant=='NOx'~.5,
+                                                type=="captive power" & pollutant=='Hg'~.7,
+                                                T~1)) %>% 
+  write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster_APC v3.csv'))
