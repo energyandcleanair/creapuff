@@ -405,13 +405,12 @@ clusters %>% to_sf_points %>%
 
 emis_modeled %<>% mutate(Year=na.cover(Year, quantile(Year, .75, na.rm=T)))
 
-emis_modeled %>% mutate(Year=na.cover(Year, quantile(Year, .75, na.rm=T))) %>% 
-  write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv'))
+emis_modeled %>% write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv'))
 
 
-emis_modeled %>% mutate(emissions_tpa=case_when(type=='process' & grepl('^PM', pollutant)~.05,
-                                                type=="captive power" & pollutant=='SO2'~.15,
-                                                type=="captive power" & pollutant=='NOx'~.5,
-                                                type=="captive power" & pollutant=='Hg'~.7,
-                                                T~1)) %>% 
+emis_modeled %>% mutate(emissions_tpa=emissions_tpa * case_when(type=='process' & grepl('^PM', pollutant)~.05,
+                                                                type=="captive power" & pollutant=='SO2'~.15,
+                                                                type=="captive power" & pollutant=='NOx'~.5,
+                                                                type=="captive power" & pollutant=='Hg'~.7,
+                                                                T~1)) %>% 
   write_csv(file.path(output_dir, 'emissions', 'emissions_with_cluster_APC v3.csv'))
