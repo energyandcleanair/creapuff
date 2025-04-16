@@ -240,7 +240,7 @@ runCalmet <- function(
                       paste0('  ', UTMZ, UTMH),
                       'WGS-84   10-10-2002  ',
                       paste0(
-                        paste(format(c(nx, ny),digits=0,width=8),collapse=""),
+                        paste(format(c(nx, ny),width=8),collapse=""),
                         paste(format(c(bb@xmin, bb@ymin, res, res),nsmall=3,width=12),
                               collapse="")),
                       'KM  M   ', '  0')
