@@ -509,7 +509,8 @@ make_tifs <- function(calpuff_files,
                       subsets = F,
                       max.ranks = 1,
                       overwrite=F,
-                      nmax=8, idp=1.5, ...) {
+                      nmax=8, idp=1.5, 
+                      output_dir=NULL, ...) {
   
   if(is.null(queue)) queue = 1:nrow(calpuff_files)
   
@@ -530,6 +531,8 @@ make_tifs <- function(calpuff_files,
         gsub(subsets[1],"",.) %>%
         gsub('rank\\(all)', paste0('rank(',rank.n,')'), .) -> rfile
       
+      if(!is.null(output_dir)) rfile %<>% basename() %>% file.path(output_dir, .)
+      
       if(file.exists(rfile)) message('tif file exists: ', rfile, ifelse(overwrite, ". [OVERWRITING]", ". [IGNORING]"))
       if(!file.exists(rfile) | overwrite) {
         inF <- sapply(subsets, function(x) gsub(subsets[1],x,files[file]))
@@ -538,7 +541,7 @@ make_tifs <- function(calpuff_files,
         inF %>% lapply(read_calpost) %>% do.call(rbind, .) -> poll
         poll[, c(1:2, 2+rank.n)] -> poll
         colnames(poll) = c("Xkm","Ykm","conc")
-        poll$conc <- calpuff_files[file,"scale"] * poll$conc
+        poll$conc <- calpuff_files$scale[file] * poll$conc
         
         pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
                                          data = subset(poll,select=-c(Xkm,Ykm)),
