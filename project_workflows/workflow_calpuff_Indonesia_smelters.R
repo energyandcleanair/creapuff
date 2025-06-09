@@ -312,7 +312,7 @@ for(i in seq_along(batches)) {
 
 
 #aggregated scenarios
-emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions_with_cluster v2.csv'))
+emissions_clustered_all <- read_csv(file.path(emissions_dir, 'emissions_with_cluster v3.csv'))
 emissions_data %>% ungroup %>% select(emission_names, ends_with("tpa")) %>% 
   pivot_longer(-emission_names, names_to='pollutant', values_to='emissions_tpa_modeled') %>% 
   mutate(pollutant=gsub('_.*', '', pollutant)) ->
