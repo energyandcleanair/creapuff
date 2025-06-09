@@ -217,7 +217,7 @@ plot_contours <- function(calpuff_files,
       coord_sf(xlim=c(plot_bb_3857@xmin, plot_bb_3857@xmax),
                ylim=c(plot_bb_3857@ymin, plot_bb_3857@ymax)) +
       theme(panel.border = element_rect(fill=NA, color='black')) +
-      scale_color_manual(values=colRamp, limits=contour_breaks, drop=F, name=plotunit, guide=contour_guide_color,
+      scale_color_manual(values=colRamp, drop=F, name=plotunit, guide=contour_guide_color,
                          label=contour_breaks) +
       scale_fill_manual(values=fillRamp, drop=F, name=plotunit, guide=contour_guide_fill,
                         label=contour_breaks) +
