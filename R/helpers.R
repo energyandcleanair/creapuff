@@ -538,7 +538,7 @@ make_tifs <- function(calpuff_files,
         inF %>% lapply(read_calpost) %>% do.call(rbind, .) -> poll
         poll[, c(1:2, 2+rank.n)] -> poll
         colnames(poll) = c("Xkm","Ykm","conc")
-        poll$conc <- calpuff_files[file,"scale"] * poll$conc
+        poll$conc <- calpuff_files[file,"scale",drop=T] * poll$conc
         
         pollSP <- SpatialPointsDataFrame(coords = subset(poll,select=c(Xkm,Ykm)),
                                          data = subset(poll,select=-c(Xkm,Ykm)),
