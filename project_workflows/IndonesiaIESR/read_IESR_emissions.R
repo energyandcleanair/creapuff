@@ -13,6 +13,8 @@ missed_sources %>%
             across(c(MW, ends_with('pa')), sum, na.rm=T)) %>%
   bind_rows(emissions_data, .) -> emissions_data
 
+emissions_data %>% write_csv(file.path(emissions_dir, 'emissions, clustered, with missing sources.csv'))
+
 bind_rows(read_csv(file.path(emissions_dir, 'emissions inputs, with clustering.csv')),
           missed_sources) %>%
   distinct(emission_names, CFPP.name) -> emissions_clustering
