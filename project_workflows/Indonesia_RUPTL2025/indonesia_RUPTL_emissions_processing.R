@@ -78,7 +78,7 @@ emis_long %<>% filter(Status %notin% c('shelved', 'cancelled', 'retired') | !is.
                          T~COD))
 
 prioritize_retirement <- function(plantdata) {
-  plantdata %>% ungroup %>% distinct(CFPP.name, .keep_all=T) %>% arrange(cost_mn_currentUSD_per_GWh)
+  plantdata %>% ungroup %>% distinct(CFPP.name, .keep_all=T) %>% arrange(cost_mn_currentUSD_per_TWh)
   #plantdata %>% filter(pollutant=='SOx', year==2022) %>% select(-year) %>% arrange(emissions_t_per_GWh)
 }
 
@@ -120,8 +120,9 @@ emis_long %<>% group_by(region, province) %>%
   })
    
 #add health impact per GWh for prioritization
-emissions_dir <- "G:/IndonesiaIESR/emissions"
-#emissions_dir <- "G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP/"
+#emissions_dir <- "G:/IndonesiaIESR/emissions"
+project_dir <- "G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP"
+emissions_dir <- "G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP/emissions"
 
 #read clusters
 clusters <- read_csv(file.path(emissions_dir, 'emissions, clustered, with missing sources.csv')) %>% to_sf_points() %>% 
@@ -136,8 +137,11 @@ emis_long %>% ungroup %>% distinct(CFPP.name, Latitude, Longitude) %>% to_sf_poi
 emis_long %<>% left_join(clustering)
 emis_long %>% write_csv(file.path(emissions_dir, 'RUPTL emissions by unit, with cluster.csv'))
 
-source('~/creahia/project_workflows/Indonesia_RUPTL/do_hia_function.R')
-hia_plants <- emis_long %>% mutate(year=2024, utilization=base_utilization, scenario='base_year') %>% do_hia()
+if(!exists('hia_plants')) {
+  source('../creahia/project_workflows/Indonesia_RUPTL/do_hia_function.R')
+  hia_plants <- emis_long %>% mutate(year=2024, utilization=base_utilization, scenario='base_year') %>% 
+    do_hia(project_dir=project_dir)
+}
 
 hia_plants %>% 
   group_by(CFPP.name, estimate) %>% summarise(across(ends_with('per_TWh'), sum)) %>% 
@@ -145,50 +149,68 @@ hia_plants %>%
   left_join(emis_long, .) -> emis_long
 
 #TODO: scenarios: RUPTL capacity additions, captive additions, RUPTL vs JET-P and 1p5 generation
-#TODO: pull ADB retirement years from old data
+#pull BAU and ADB retirement years from old data
+read_xlsx('project_workflows/IndonesiaIESR/data/MASTERLIST_Indonesia Coal.xlsx', sheet='PLN & IPP',
+          skip=1) %>% set_names(make.names(names(.))) %>% select(CFPP.name, GEM.ID, contains('retire')) ->
+  retirement_years
+
+emis_long %<>% left_join(retirement_years)
+
+#TODO: add gas emissions
+#G:/Shared drives/CREA-data/Global Coal Plant Tracker/non_coal/Global-Oil-and-Gas-Plant-Tracker-GOGPT-August-2023.xlsx
 
 #add BAU retirement
-emis_long %<>% mutate(earliest_retire=round(2042 + (COD-2022)/3, 0),
+emis_long %<>% mutate(earliest_retire=round(2042 + (COD-2022)/5, 0),
                       year_retire = case_when(!is.na(BAU.retire)~BAU.retire,
                                               Owner=='captive'~pmax(COD+30, earliest_retire), 
                                               T~pmax(COD+30, earliest_retire)), 
-                      scenario='BAU')
+                      scenario="RUPTL 2025-2034 - RE Base")
 
 #expand to all projection years
 years <- emis_long$year_retire %>% subset(is.finite(.)) %>% max %>% add(2) %>% seq(2000, ., 1)
 
-emis_long %<>% full_join(tibble(year=years), by=character())
+emis_long %<>% cross_join(tibble(year=years))
 
 #add ACT scenario
-emis_long %<>% mutate(year_retire = case_when(!is.na(ADB_retire)~ADB_retire, T~year_retire), scenario='ACT Investment Plan') %>% 
-  bind_rows(emis_long)
+#emis_long %<>% mutate(year_retire = case_when(!is.na(ADB_retire)~ADB_retire, T~year_retire), scenario='ACT Investment Plan') %>% 
+#  bind_rows(emis_long)
 
-jetp_traj <- tibble(year=2036:2051) %>% mutate(delta_percent=-approx(c(2036,2051), c(0,1), year)$y^2)
-jetp_captive_traj <- tibble(year=2055:2059) %>% mutate(delta_percent=-approx(c(2055,2060), c(0,1), year)$y^2)
+perpres_traj <- tibble(year=2040:2051) %>% mutate(delta_percent=-approx(c(2040,2051), c(0,1), year)$y^2)
+perpres_captive_traj <- tibble(year=2055:2059) %>% mutate(delta_percent=-approx(c(2055,2060), c(0,1), year)$y^2)
 
-emis_long %<>% mutate(status_category = case_when(grepl('oper|constr|permitted', Status)~'existing',
+emis_long %<>% mutate(status_category = case_when(grepl('oper|constr|permitted|existing', Status)~'existing',
                                                   T~'new'))
 
 #add PERPRES scenario
-emis_long %<>% filter(scenario=='ACT Investment Plan') %>% 
+emis_long %<>% filter(grepl('RUPTL 2025', scenario)) %>% 
   mutate(eligible_for_retirement = Owner != 'captive') %>% 
   group_by(grid) %>% 
-  retire_plants(traj=jetp_traj) %>% 
+  retire_plants(traj=perpres_traj) %>% 
   mutate(eligible_for_retirement = Owner == 'captive' & status_category=='existing') %>% 
-  retire_plants(traj=jetp_captive_traj) %>% 
+  retire_plants(traj=perpres_captive_traj) %>% 
   mutate(year_retire = case_when(Owner=='captive' & status_category=='new' & year_retire > 2050 ~ 2050, T~year_retire)) %>% 
   mutate(scenario='PERPRES 112/2022') %>% 
   bind_rows(emis_long)
 
+
+#add JETP capacity scenario
+emis_long %<>% mutate(new_in_ruptl=!is.na(In.RUPTL.2025.2034) & In.RUPTL.2025.2034=='Yes' & COD>2024 & Status!='operating')
+
+emis_long %<>% filter(scenario=='PERPRES 112/2022') %>% 
+  mutate(COD=ifelse(new_in_ruptl, Inf, COD),
+         scenario='JETP CIPP') %>% 
+  bind_rows(emis_long)
+
+
 #add 1.5 degree scenario
 traj_1.5 <- coal_gen %>% ungroup %>% 
-  filter(Scenario=='1p5', year>=2025) %>% 
+  filter(scenario=='1p5', year>=2025) %>% 
   mutate(delta_percent=GW/GW[year==2025]-1) %>% 
   full_join(tibble(year=2025:2070), .) %>% 
   mutate(delta_percent = approx(year, delta_percent, year, rule=1)$y) %>% 
   fill(delta_percent)
 
-emis_long %<>% filter(scenario=='PERPRES 112/2022') %>% 
+emis_long %<>% filter(scenario=='JETP CIPP') %>% 
   mutate(eligible_for_retirement = Owner != 'captive',
          COD = ifelse(Status %in% c('operating', 'construction') | !eligible_for_retirement, COD, Inf)) %>% 
   group_by(grid) %>% 
@@ -199,7 +221,7 @@ emis_long %<>% filter(scenario=='PERPRES 112/2022') %>%
   bind_rows(emis_long)
 
 #add 1.5 degree with captive scenario
-emis_long %<>% filter(scenario=='PERPRES 112/2022') %>% 
+emis_long %<>% filter(scenario=='JETP CIPP') %>% 
   mutate(eligible_for_retirement = T,
          COD = ifelse(Status %in% c('operating', 'construction') | !eligible_for_retirement, COD, Inf)) %>% 
   group_by(grid) %>% 
@@ -207,37 +229,50 @@ emis_long %<>% filter(scenario=='PERPRES 112/2022') %>%
   mutate(scenario='1.5 degrees') %>% 
   bind_rows(emis_long)
 
-
 #calculate utilization adjustment based on pathway
-emis_long %<>% group_by(scenario, Owner) %>% 
-  group_modify(function(df, group) {
-    basis_scen = ifelse(grepl('1\\.5', group$scenario), '1p5', 'cpol')
-    coal_gen %>% filter(Scenario==basis_scen) -> gen_scen
-    df %<>% mutate(utilization = case_when(group$Owner=='captive'~base_utilization, 
-                                           T~approx(gen_scen$year, gen_scen$load_factor, df$year, rule=2)$y * utilization_uplift),
-                   ccs_share = approx(gen_scen$year, gen_scen$ccs_share, df$year, rule=2)$y)
-    
-    return(df)
-  })
+coal_gen %<>% mutate(scenario=recode(scenario, "1p5"="1.5 degrees"))
+emis_long %<>% mutate(source='Coal')
+
+coal_gen %>% 
+  filter(year>=2024, year<=case_when(grepl('2034', scenario)~2034, grepl('JETP', scenario)~2040, T~Inf)) %>% 
+  group_by(scenario, source) %>% mutate(generation_change=EJ/EJ[year==2024]) %>%
+  select(source, year, generation_change) ->
+  coal_gen_changes
+
+emis_long %>% filter(pollutant=='SOx', year_retire>year, COD<year, Owner!='captive') %>% 
+  group_by(scenario, source, year) %>% summarise(across(GWh, sum)) %>% 
+  mutate(generation_change_bottom_up=GWh/GWh[year==2024]) %>% 
+  inner_join(coal_gen_changes) %>% 
+  mutate(generation_change=generation_change %>% zoo::na.approx(na.rm=F, rule=1),
+         utilization_adjustment=(generation_change/generation_change_bottom_up)) %>% 
+  fill(utilization_adjustment, .direction='down') %>% 
+  select(scenario, source, year, utilization_adjustment) ->
+  utilization_adjustment
+
+utilization_adjustment %<>% filter(grepl('RUPTL 2025', scenario)) %>% 
+  mutate(scenario='PERPRES 112/2022') %>% 
+  bind_rows(utilization_adjustment)
+
+emis_long %<>% left_join(utilization_adjustment) %>% 
+  mutate(utilization=base_utilization * case_when(Owner=='captive' | is.na(utilization_adjustment)~1, T~utilization_adjustment),
+         utilization=pmin(utilization, .9))
+
+emis_long %<>% left_join(coal_gen %>% select(scenario, source, year, ccs_share)) %>% 
+  group_by(scenario, source) %>% 
+  mutate(ccs_share=ccs_share %>% zoo::na.approx(rule=2, na.rm=F)) %>% 
+  replace_na(list(ccs_share=0))
 
 emis_long %<>% mutate(across(c(emissions_t, GWh), ~.x * utilization / base_utilization))
+
+#add cancellation of new plants in RUPTL
+emis_long %<>% filter(grepl('RUPTL 2025', scenario)) %>% 
+  mutate(COD=ifelse(new_in_ruptl, Inf, COD),
+         scenario='without new plants included in 2025 RUPTL') %>% 
+  bind_rows(emis_long)
 
 #calculate effect of co-firing on emissions
 cofiring_effect = read_csv('../eu_ied_review/outputs/cofiring_analysis/cofiring impact on emissions.csv') %>% 
   mutate(biomass_effect=pmax(biomass_effect, 1-biomass_share))
-
-cofiring_effect %>% 
-  ggplot(aes(biomass_share, biomass_effect)) + 
-  geom_line(linewidth=1, color=crea_palettes$dramatic[1]) + 
-  facet_wrap(~pollutantCode) +
-  labs(title='Effect of biomass co-firing on air pollutant emissions',
-       x='biomass share', y='emissions without co-firing = 100%') +
-  theme_crea() +
-  scale_x_continuous(expand=expansion(mult=c(0,0)), labels = scales::percent) +
-  scale_y_continuous(expand=expansion(mult=c(0,0.05)), labels = scales::percent) +
-  expand_limits(y=0) +
-  theme(panel.spacing = unit(2, 'lines'), plot.margin = margin(1, 1, .25, .25, unit='lines')) -> plt
-quicksave(file.path(output_dir, 'Effect of biomass co-firing on air pollutant emissions.png'), plot=plt, scale=.9, footer_height=.03)
 
 get_cofiring_effect <- function(df) {
   df %>% mutate(pollutant_ird = recode(pollutant, PM='DUST', NOx='NOX', SOx='SO2')) %>% 
@@ -274,7 +309,7 @@ if(include_no_cofiring_scenarios) {
 }
 
 emis_long %<>% 
-  mutate(cofiring_share = case_when(Owner=='PLN' & scenario=='PERPRES 112/2022' & cofiring_share>0 ~ 
+  mutate(cofiring_share = case_when(Owner=='PLN' & grepl('PERPRES|JETP|RUPTL', scenario) & cofiring_share>0 ~ 
                                       pmax(approx(c(2025,2030,2035), c(0,.1,.2), year, rule=2)$y, 
                                            cofiring_share, na.rm = T),
                                     scenario=='BAU no cofiring'~0,
@@ -289,14 +324,17 @@ if(include_no_cofiring_scenarios) {
   bind_rows(emis_long)
 }
 
-emis_long %<>% 
-  get_cofiring_effect %>% 
-  group_by(CFPP.name, pollutant, year) %>% 
-  mutate(cofiring_effect = cofiring_effect * 
-           case_when(scenario=='PERPRES 112/2022 no additional cofiring' & 
-                       cofiring_share < 1 ~ (1-cofiring_share[scenario=='PERPRES 112/2022'])/(1-cofiring_share),
-                     scenario=='BAU no cofiring' ~ (1-cofiring_share[scenario=='BAU']),
-                     T~1)) 
+emis_long %<>% get_cofiring_effect
+
+if(include_no_cofiring_scenarios) {
+  emis_long %<>% 
+    group_by(CFPP.name, pollutant, year) %>% 
+    mutate(cofiring_effect = cofiring_effect * 
+             case_when(scenario=='PERPRES 112/2022 no additional cofiring' & 
+                         cofiring_share < 1 ~ (1-cofiring_share[scenario=='PERPRES 112/2022'])/(1-cofiring_share),
+                       scenario=='BAU no cofiring' ~ (1-cofiring_share[scenario=='BAU']),
+                       T~1))
+}
 
 
 
@@ -360,9 +398,12 @@ if(include_APC_scenarios) {
 
 #export emissions pathways
 emis_long %>% select(pollutant, scenario, Owner, grid, region, province, Latitude, Longitude, CFPP.name, MW, GEM.ID,
-                     Status, COD, year_retire, year, utilization, emissions_t) %>% 
+                     Status, new_in_ruptl, COD, year_retire, year, utilization, emissions_t) %>% 
   saveRDS(file.path(emissions_dir, 'indonesia_RUPTL_emission_pathways.RDS'))
 
+
+emis_long %>% distinct(CFPP.name, GEM.ID, province, grid, scenario, COD, year_retire, MW) %>% 
+  write_csv('G:/Shared drives/CREA-HIA/Projects/Indonesia_RUPTL2025/emissions/plant_retirement.csv')
 
 #capacity pathways
 require(rcrea)
