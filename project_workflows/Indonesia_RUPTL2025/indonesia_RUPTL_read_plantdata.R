@@ -138,6 +138,8 @@ read_wide_xlsx(file.path(emissions_dir, "RUPTL 2025.xlsx"), sheet='coal & gas',
                info_columns = 1) %>% filter(fuel!='Year') %>% 
   rename(year=Year) -> ruptl_cap
 
+ruptl_cap$scenario[grep('RUPTL 2025', ruptl_cap$scenario)] <- "RUPTL 2025-2034 - RE Base"
+
 ruptl_cap %>% ggplot(aes(year, value, col=fuel, linetype=scenario)) + facet_wrap(~variable, scales='free_y') + geom_line()
 
 #1.5 degree trajectory
@@ -158,7 +160,7 @@ gen %>% filter(grepl('Coal|Gas', source)) %>%
   mutate(source_subtype = case_when(!is.na(source_subtype)~source_subtype,
                                     grepl('ccs', source)~source %>% gsub('(Coal|Gas) ', '', .) %>% gsub('ccs', 'CCS', .)),
          source=source %>% gsub(' .*', '', .)) %>% 
-  group_by(Scenario, year, variable, source) %>% 
+  group_by(scenario=Scenario, year, variable, source) %>% 
   #add CCS+non-CCS total if missing
   group_modify(function(df, ...) {
     if(!any(is.na(df$source_subtype)))
@@ -167,7 +169,7 @@ gen %>% filter(grepl('Coal|Gas', source)) %>%
   }) -> coal_gen
 
 
-ruptl_cap %>% rename(Scenario=scenario, source=fuel) %>% 
+ruptl_cap %>% rename(source=fuel) %>% 
   mutate(value=value*case_when(grepl('MW', variable)~1e-3,
                                grepl('GWh', variable)~3600/1e9),
          variable=case_when(grepl('MW', variable)~'GW',
@@ -176,7 +178,7 @@ ruptl_cap %>% rename(Scenario=scenario, source=fuel) %>%
   coal_gen
 
 coal_gen %>% replace_na(list(source_subtype='Total')) %>% 
-  ggplot(aes(year, value, col=Scenario, linetype=source_subtype)) + 
+  ggplot(aes(year, value, col=scenario, linetype=source_subtype)) + 
   geom_line() + facet_wrap(~source+variable, scales='free_y')
 
 #fill missing values and align past values between scenarios
@@ -192,40 +194,44 @@ fade <- function(x1, x2, year, from, to) {
 }
 
 coal_gen %<>% ungroup %>% 
-  complete(Scenario, year, variable, source, source_subtype) %>% 
-  group_by(variable, source, source_subtype, Scenario) %>% 
+  complete(scenario, year, variable, source, source_subtype) %>% 
+  group_by(variable, source, source_subtype, scenario) %>% 
   mutate(value=zoo::na.approx(value, year, year, na.rm=F, rule=1:2))
 
 coal_gen %>% 
   filter(is.na(source_subtype)) %>% 
   group_by(variable, source, source_subtype) %>% 
-  mutate(value=case_when(year<=2030~fade(value[grepl('RUPTL', Scenario)], value, year, from=2025, to=2030),
+  mutate(value=case_when(year<=2030~fade(value[scenario=="RUPTL 2025-2034 - RE Base"], value, year, from=2025, to=2030),
                          source=='Coal' & year>=2040~fade(value, 0, year, from=2040, to=2050),
                          T~value)) ->
   coal_gen_total
 
 #add CCS share
 coal_gen %>% filter(variable=='EJ') %>% 
-  group_by(source, Scenario, year) %>% 
+  group_by(source, scenario, year) %>% 
   summarise(value=sum(value[grepl('w/ CCS', source_subtype)], na.rm=T)/sum(value[!is.na(source_subtype)])) %>% 
   mutate(variable='ccs_share', value=na.cover(value, 0)) %>% 
   bind_rows(coal_gen_total) ->
   coal_gen
 
 #add LF
-coal_gen %<>% group_by(source, Scenario, year) %>% 
+coal_gen %<>% group_by(source, scenario, year) %>% 
   summarise(value = value[variable=='EJ']/(value[variable=='GW']*8760*3600/1e9)) %>% 
   mutate(variable='load_factor', value=pmin(.9, value)) %>% 
   bind_rows(coal_gen)
 
+coal_gen %>% ggplot(aes(year, value, col=scenario)) + 
+  geom_line() + facet_wrap(~source+variable, scales='free_y')
+
 #retrieve base utilization
-coal_gen %>% filter(year==2024, variable=='load_factor') %>% ungroup %>% distinct(source, value) -> base_utilization
+coal_gen %>% filter(year==2024, variable=='load_factor', grepl('RUPTL 2025-2034', scenario)) %>% 
+  ungroup %>% distinct(source, scenario, value) -> base_utilization
 #utilization_uplift = 0.675 / base_utilization_gcam #actual utilization calculated from BP generation data
 utilization_uplift = 1 #not needed when using RUPTL data
   
 coal_gen %>% 
-  filter(Scenario!='cpol', year<=2050, !is.na(value)) %>% 
-  ggplot(aes(year, value, col=Scenario, linetype=source)) + facet_wrap(~variable, scales='free_y') + geom_line() +
+  filter(scenario!='cpol', year<=2050, !is.na(value)) %>% 
+  ggplot(aes(year, value, col=scenario, linetype=source)) + facet_wrap(~variable, scales='free_y') + geom_line() +
   expand_limits(y=0)
 
-coal_gen %<>% select(source, Scenario, year, variable, value) %>% spread(variable, value)
+coal_gen %<>% select(source, scenario, year, variable, value) %>% spread(variable, value)
