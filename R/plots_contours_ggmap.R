@@ -161,7 +161,7 @@ plot_contours <- function(calpuff_files,
     #make the plot
     message(unique(calpuff_files[[i]]$title), unique(calpuff_files[[i]]$subtitle))
     
-    map_plot <- ggmap(basemap)
+    map_plot <- ggplot() + basemap
     
     if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name, ncol=facet_ncol)
     
