@@ -43,11 +43,11 @@ Depends:
     ncdf4,
     ggplot2,
     creahelpers,
-    metR,
-    plotKML
+    metR
 Suggests:
     knitr,
-    testthat(>= 2.1.0)
+    testthat(>= 2.1.0),
+    plotKML
 VignetteBuilder:
     knitr
 RoxygenNote: 7.2.3

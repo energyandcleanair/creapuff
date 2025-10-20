@@ -30,6 +30,51 @@
 #'
 #' @examples
 #' 
+
+apply_alpha_to_palette <- function(colors, alphas) {
+  if (length(colors) != length(alphas)) {
+    alphas <- rep(alphas, length.out = length(colors))
+  }
+  mapply(function(col, a) grDevices::adjustcolor(col, alpha.f = a),
+         colors, alphas, USE.NAMES = FALSE)
+}
+
+make_dummy_contour_layer <- function(plot_bb_3857, contour_breaks, max_val) {
+  # Compute actual breaks: include max_val only if it exceeds the top break,
+  # otherwise add a tiny epsilon to keep bin count consistent
+  top_break <- max(contour_breaks, na.rm = TRUE)
+  if (is.finite(max_val) && max_val > top_break) {
+    actual_breaks <- c(contour_breaks, max_val)
+  } else {
+    last_step <- if (length(contour_breaks) > 1) diff(tail(contour_breaks, 2)) else max(1, abs(top_break))
+    eps <- max(1e-9, abs(last_step) * 1e-6)
+    actual_breaks <- c(contour_breaks, top_break + eps)
+  }
+
+  midpoints <- (actual_breaks[-1] + actual_breaks[-length(actual_breaks)]) / 2
+
+  # Build a tiny in-bounds grid near the lower-left of the panel using plot bounds
+  x_min <- plot_bb_3857@xmin; x_max <- plot_bb_3857@xmax
+  y_min <- plot_bb_3857@ymin; y_max <- plot_bb_3857@ymax
+  width_x <- x_max - x_min
+  height_y <- y_max - y_min
+  n_levels <- length(midpoints)
+  dummy_lon <- x_min + seq_len(n_levels) * (width_x / (n_levels + 2)) * 1e-3
+  dummy_lat <- y_min + c(0, 1e-3) * height_y
+  dummy_cf_df <- expand.grid(lon = dummy_lon, lat = dummy_lat)
+  dummy_cf_df$value <- rep(midpoints, each = length(dummy_lat))
+
+  layer <- ggplot2::geom_contour_filled(
+    data = dummy_cf_df,
+    ggplot2::aes(lon, lat, z = value),
+    breaks = actual_breaks,
+    inherit.aes = FALSE,
+    show.legend = TRUE
+  )
+
+  list(layer = layer, breaks = actual_breaks)
+}
+
 plot_contours <- function(calpuff_files,
                           plot_bb,
                           contour_type='both',
@@ -92,6 +137,7 @@ plot_contours <- function(calpuff_files,
   plot_filenames <- character()
   
   for(i in seq_along(calpuff_files)) {
+    
     plot_filename <- unique(calpuff_files[[i]]$plot_filename)
     plot_title <- unique(calpuff_files[[i]]$title)
     plot_subtitle <- unique(calpuff_files[[i]]$subtitle)
@@ -145,7 +191,7 @@ plot_contours <- function(calpuff_files,
     #prepare color scales
     colRamp <- colorRampPalette(color_scale)(length(contour_breaks))
     alphas <- seq(0,1,length.out=length(contour_breaks)+1)[-1] %>% fill_alpha_function
-    fillRamp <- colRamp %>% col.a(alphas)
+    fillRamp <- apply_alpha_to_palette(colRamp, alphas)
     
     #prepare dataframe with raster data for plotting
     r %<>% projectRaster(crs = '+init=EPSG:3857') %>% crop(plot_bb_3857*1.2)
@@ -161,7 +207,7 @@ plot_contours <- function(calpuff_files,
     #make the plot
     message(unique(calpuff_files[[i]]$title), unique(calpuff_files[[i]]$subtitle))
     
-    map_plot <- ggplot() + basemap
+    map_plot <- ggmap(basemap)
     
     if(facet_by != '') map_plot = map_plot + facet_wrap(~faceting_name, ncol=facet_ncol)
     
@@ -175,8 +221,15 @@ plot_contours <- function(calpuff_files,
       map_plot = map_plot + annotation_spatial(area_sources, fill=source_label_color)
     }
     
-    if(contour_type %in% c('filled', 'both')) map_plot = map_plot + 
-      geom_contour_filled(data=concs_df, aes(lon, lat, z=value), breaks=c(contour_breaks, max_val))
+    if(contour_type %in% c('filled', 'both')) {
+      # Dummy filled contours (added first) to ensure legend shows all bins at full size
+      dummy <- make_dummy_contour_layer(plot_bb_3857, contour_breaks, max_val)
+
+      map_plot = map_plot +
+        dummy$layer +
+        # Main filled contours on top
+        geom_contour_filled(data=concs_df, aes(lon, lat, z=value), breaks=dummy$breaks)
+    }
     
     if(contour_type %in% c('lines', 'both') & label_contours) map_plot = map_plot + 
       metR::geom_contour2(data=concs_df, aes(lon, lat, z=value, col=as.factor(..level..), label=..level..), 
@@ -220,7 +273,9 @@ plot_contours <- function(calpuff_files,
       scale_color_manual(values=colRamp, drop=F, name=plotunit, guide=contour_guide_color,
                          label=contour_breaks) +
       scale_fill_manual(values=fillRamp, drop=F, name=plotunit, guide=contour_guide_fill,
-                        label=contour_breaks) +
+                        label=contour_breaks,
+                        na.value = "transparent"
+                        ) +
       labs(title=str_wrap(plot_title, title_width_characters), 
            subtitle=unique(plot_subtitle),
            x='', y='') +
