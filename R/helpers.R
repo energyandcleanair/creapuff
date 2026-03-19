@@ -10,32 +10,76 @@ get_ll <- function(loc){
   return(unname(ll))
 }
 
+#' Get UTM hemisphere from a spatial object
+#'
+#' @param loc A spatial object or anything accepted by \code{creahelpers::to_spdf}.
+#' @return \code{"s"} or \code{"n"}.
 get_utm_hem <- function(loc){
   ll <- get_ll(loc)
   ifelse(ll[2]<0, "s", "n")
 }
 
+#' Get UTM zone number from a spatial object
+#'
+#' @param loc A spatial object or anything accepted by \code{creahelpers::to_spdf}.
+#' @return Integer UTM zone number (1--60).
 get_utm_zone <- function(loc){
   ll <- get_ll(loc)
   return(floor((ll[1] + 180)/6) %% 60 + 1)
 }
 
 
+#' Build a proj4 string for a UTM zone
+#'
+#' @param zone Integer UTM zone number. Derived from \code{loc} if \code{NULL}.
+#' @param hem Hemisphere: \code{"N"} or \code{"S"}. Derived from \code{loc} if \code{NULL}.
+#' @param loc Optional spatial object used to infer \code{zone} and \code{hem}.
+#' @param units Coordinate units for the proj4 string (default \code{"km"}).
+#' @return A proj4 string, e.g. \code{"+proj=utm +datum=WGS84 +no_defs +zone=52 +units=km"}.
 get_utm_proj <- function(zone=NULL, hem=NULL, loc=NULL, units="km") {
-  
+
   if(!is.null(loc) & (!is.null(zone) | !is.null(hem)))
     warning("using explicit zone / hemisphere settings to override coordinate input")
-  
+
   if(!is.null(loc) & is.null(zone)){
     zone <- get_utm_zone(loc)
-  } 
-  
+  }
+
   if(is.null(hem)){
     hem <- get_utm_hem(loc)
   }
   southhemi <- tolower(substr(hem,1,1)) == "s"
-  
+
   paste0("+proj=utm +datum=WGS84 +no_defs +zone=",zone,ifelse(southhemi," +south ","")," +units=",units)
+}
+
+
+#' Convert lat/lon coordinates to UTM easting and northing
+#'
+#' @param lat Numeric vector of latitudes (WGS84 degrees).
+#' @param lon Numeric vector of longitudes (WGS84 degrees).
+#' @param utm_zone Character UTM zone, e.g. \code{"52N"} or \code{"33S"}.
+#'   The number is the zone (1--60) and the letter is the hemisphere.
+#' @param units Character. Coordinate units: \code{"km"} or \code{"m"}.
+#'   Must be specified explicitly.
+#'
+#' @return A data.frame with columns \code{easting} and \code{northing}
+#'   in the requested units.
+#' @export
+#'
+#' @examples
+#' latlon_to_utm(lat = 35.315, lon = 129.178, utm_zone = "52N", units = "km")
+latlon_to_utm <- function(lat, lon, utm_zone, units) {
+  units <- match.arg(units, choices = c("km", "m"))
+  zone_num <- as.integer(gsub("[A-Za-z]", "", utm_zone))
+  hem      <- gsub("[0-9]", "", utm_zone)
+  proj     <- get_utm_proj(zone = zone_num, hem = hem, units = units)
+
+  pts <- sf::st_as_sf(data.frame(lon = lon, lat = lat),
+                       coords = c("lon", "lat"), crs = 4326)
+  pts_utm <- sf::st_transform(pts, crs = sf::st_crs(proj))
+  coords  <- sf::st_coordinates(pts_utm)
+  data.frame(easting = coords[, "X"], northing = coords[, "Y"])
 }
 
 
