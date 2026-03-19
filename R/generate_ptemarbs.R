@@ -1,27 +1,63 @@
-#' Generating PTEMARB files from sources end emissions.
-#' 
-#' The script will generate ONE PTEMARB FILE per cluster in indicated folder.
+#' Generate PTEMARB files from sources and emissions
 #'
-#' @param folder 
-#' @param scenario 
-#' @param prefix 
-#' @param sources 
-#' @param emissions 
-#' @param species 
-#' @param utc_zone example: UTC+0800
-#' @param utm_zone example: 52N
-#' @param begin_date 
-#' @param end_date 
+#' Generates one PTEMARB.DAT file per cluster in the indicated folder.
+#' These files are used as time-varying point source inputs for CALPUFF.
 #'
-#' @return
+#' The function proceeds in three steps:
+#' \enumerate{
+#'   \item Writes \code{sources.csv} and \code{emissions.csv} into \code{folder}.
+#'   \item Generates a \code{config.json} file in \code{folder} (via
+#'     \code{\link{ptemarb.create_config_file}}) that points to these CSVs
+#'     and captures all run parameters (species, dates, UTC zone, etc.).
+#'   \item Calls the bundled Python script
+#'     \code{inst/python/generate_ptemarb.py} via \code{reticulate},
+#'     passing \code{config.json} as argument. This script reads the config
+#'     and produces one \code{ptemarb_<cluster_id>.DAT} file per cluster.
+#' }
+#'
+#' @param folder Character. Output directory for generated PTEMARB files.
+#' @param sources A data.frame with columns: \code{source_id}, \code{cluster_id},
+#'   \code{stack_height_m}, \code{stack_diameter_m}, \code{easting_m},
+#'   \code{northing_m}, \code{utm_zone}, \code{temp_k}.
+#'   See template at \code{inst/templates/generate_ptemarbs/sources.csv}.
+#' @param emissions A data.frame with columns: \code{source_id}, \code{date},
+#'   \code{unit} (\code{"kg/h"} or \code{"g/s"}), one column per species
+#'   (matching names in \code{species}), and \code{vexit_m_s}.
+#'   Hourly resolution. See template at
+#'   \code{inst/templates/generate_ptemarbs/emissions.csv}.
+#' @param utc_zone Character. UTC offset string, e.g. \code{"UTC+0800"}.
+#' @param species Named list mapping species names to molecular weights, e.g.
+#'   \code{list(SO2=64, NO=30, NO2=46, PPM25=1)}. Names must match columns
+#'   in \code{emissions}.
+#' @param scenario Character. Scenario label written into the config.
+#' @param prefix Character. Filename prefix for generated PTEMARB files.
+#' @param begin_date,end_date Date or POSIXct. Period to generate. Defaults
+#'   to the range of \code{emissions$date}.
+#'
+#' @return Called for side effects (files written to \code{folder}).
 #' @export
 #'
 #' @examples
+#' \dontrun{
+#' # --- Load template data shipped with the package ---
+#' template_dir <- system.file("templates", "generate_ptemarbs", package = "creapuff")
+#' sources   <- readr::read_csv(file.path(template_dir, "sources.csv"))
+#' emissions <- readr::read_csv(file.path(template_dir, "emissions.csv"))
+#'
+#' # --- Generate PTEMARB files ---
+#' generate_ptemarbs(
+#'   folder    = file.path(tempdir(), "ptemarb_output"),
+#'   sources   = sources,
+#'   emissions = emissions,
+#'   utc_zone  = "UTC+0900",
+#'   species   = list(SO2 = 64, NO = 30, NO2 = 46, PPM25 = 1)
+#' )
+#' }
 generate_ptemarbs <- function(folder,
                               sources,
                               emissions,
                               utc_zone,
-                              species=list(SO2=32, NO=30, NO2=46, PPM25=1),
+                              species=list(SO2=64, NO=30, NO2=46, PPM25=1),
                               scenario="scenario",
                               prefix="ptemarb_", 
                               begin_date=min(emissions$date),

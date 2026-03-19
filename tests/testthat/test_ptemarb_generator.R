@@ -1,26 +1,41 @@
 library(testthat)
 
 
-test_data_dir <- function(){
-  if(dir.exists("../test_data")) "../test_data" else "tests/test_data"
-}
+test_that("ptemarb.check_input validates sources and emissions", {
 
-test_that("ptemarb_generator works", {
-  
-  expect_true(dir.exists(test_data_dir()))
+  template_dir <- system.file("templates", "generate_ptemarbs", package = "creapuff")
+  sources   <- readr::read_csv(file.path(template_dir, "sources.csv"), show_col_types = FALSE)
+  emissions <- readr::read_csv(file.path(template_dir, "emissions.csv"), show_col_types = FALSE)
+  species   <- list(SO2 = 64, NO = 30, NO2 = 46, PPM25 = 1)
 
-  # library(tidyverse)  
-  sources <- readr::read_csv(file.path(test_data_dir(), "korea/source_characterics.csv"))
-  emissions <- readr::read_csv(file.path(test_data_dir(), "korea/emissions_by_cluster.csv"))
+  # Should pass without error
 
-  
-  creapuff::generate_ptemarbs(folder="tmp",
-                              sources=sources,
-                              emissions=emissions,
-                              species=list(SO2=32, NO=30, NO2=46, PPM25=1),
-                              utc_zone="UTC+0100")
-  
-  
-  
+  expect_silent(creapuff:::ptemarb.check_input(sources, emissions, species))
+
+  # Should fail with missing column
+  bad_sources <- sources[, -which(names(sources) == "stack_height_m")]
+  expect_error(creapuff:::ptemarb.check_input(bad_sources, emissions, species),
+               "Missing colnames in sources")
+})
+
+
+test_that("ptemarb_generator works end-to-end", {
+
+  template_dir <- system.file("templates", "generate_ptemarbs", package = "creapuff")
+  sources   <- readr::read_csv(file.path(template_dir, "sources.csv"), show_col_types = FALSE)
+  emissions <- readr::read_csv(file.path(template_dir, "emissions.csv"), show_col_types = FALSE)
+
+  output_dir <- file.path(tempdir(), "ptemarb_test")
+
+  creapuff::generate_ptemarbs(
+    folder   = output_dir,
+    sources  = sources,
+    emissions = emissions,
+    species  = list(SO2 = 64, NO = 30, NO2 = 46, PPM25 = 1),
+    utc_zone = "UTC+0900"
+  )
+
+  # Config file should have been created
+  expect_true(file.exists(file.path(output_dir, "config.json")))
 })
 

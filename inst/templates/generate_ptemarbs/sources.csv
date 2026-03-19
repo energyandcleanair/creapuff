@@ -1,0 +1,3 @@
+source_id,cluster_id,stack_height_m,stack_diameter_m,easting_m,northing_m,utm_zone,temp_k
+K10O,K10O,162,3.6,516.2143589,3908.012936,52N,373.15
+K11O,K11O,130.2,2.7,333.54404,4169.134862,52N,348.95
