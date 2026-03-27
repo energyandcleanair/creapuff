@@ -90,11 +90,29 @@ generate_ptemarbs <- function(folder,
   )
   
   message("Running python script")
-  python_exec <- reticulate::conda_python("creapuff") 
-  exec_folder <- file.path(system.file(package="creapuff"),"python")
-  f_mainpy <- "generate_ptemarb.py"
-  command <- paste("cd", exec_folder, "; ", python_exec, f_mainpy, f_config, sep = " ")
-  response <- system(command, intern=T)
+  python_exec <- reticulate::conda_python("creapuff")
+  exec_folder <- normalizePath(
+    file.path(system.file(package = "creapuff"), "python"),
+    mustWork = TRUE
+  )
+  f_script <- file.path(exec_folder, "generate_ptemarb.py")
+  # system2 + script path: no shell "cd" (breaks on Windows); Python adds the
+  # script directory to sys.path so local writers/parsers imports still work.
+  response <- system2(
+    python_exec,
+    args = c(f_script, f_config),
+    stdout = TRUE,
+    stderr = TRUE
+  )
+  exit_status <- attr(response, "status")
+  if (!is.null(exit_status) && exit_status != 0L) {
+    msg <- if (length(response)) paste(response, collapse = "\n") else ""
+    stop(
+      "Python PTEMARB generator failed (exit ", exit_status, ").",
+      if (nzchar(msg)) paste0("\n", msg) else "",
+      call. = FALSE
+    )
+  }
   
   message("Done!")
 }
