@@ -29,7 +29,7 @@ def serialize_header_general(config, cluster_group, station_emission_df):
     SPECIES_NAMES = "'" + "'\t'".join([x['NAME'] for x in SPECIES]) + "'"
     SPECIES_WEIGHTS = "\t".join([str(x['WEIGHT']) for x in SPECIES])
 
-    with open(os.path.join("templates", "header.DAT")) as file:
+    with open(os.path.join(os.path.dirname(__file__), "templates", "header.DAT")) as file:
         template = file.read()
 
     header = template.format(
@@ -58,7 +58,7 @@ def serialize_header_sources(config, cluster_group, cluster_emission_df):
 
     headers = []
 
-    with open(os.path.join("templates", "header_source.DAT")) as file:
+    with open(os.path.join(os.path.dirname(__file__), "templates", "header_source.DAT")) as file:
         template = file.read()
 
     sources = cluster_group.to_dict(orient="records")

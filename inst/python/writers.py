@@ -41,9 +41,9 @@ def write_header_sources(stream, config, cluster_group, cluster_emission_df):
 def write_records(stream, config, cluster_group, cluster_emission_df):
     dates = cluster_emission_df.groupby("date")
 
-    with open(os.path.join("templates", "emission_header.DAT")) as file:
+    with open(os.path.join(os.path.dirname(__file__), "templates", "emission_header.DAT")) as file:
         template_header = file.read()
-    with open(os.path.join("templates", "emission_record.DAT")) as file:
+    with open(os.path.join(os.path.dirname(__file__), "templates", "emission_record.DAT")) as file:
         template_record = file.read()
 
     pdates = tqdm(dates)
