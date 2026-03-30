@@ -10,7 +10,7 @@ def fill_ts(emission_df):
 
     emission_df["date"] = pd.to_datetime(emission_df.date)
     emission_df = emission_df.groupby(['source_id', 'unit']). \
-        apply(lambda x: x.set_index('date').resample('H').mean().fillna(0)). \
+        apply(lambda x: x.set_index('date').resample('h').mean().fillna(0)). \
         reset_index()
     return emission_df
 
