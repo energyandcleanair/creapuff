@@ -216,6 +216,7 @@ ptemarb.create_config_file <- function(
 
   config <- with(l, glue::glue(template, .open="{{", .close="}}"))
   config <- gsub("'","\"",config)
+  config <- gsub("\\\\", "\\\\\\\\", config)
   write_file(config, f_config)
   
 }
