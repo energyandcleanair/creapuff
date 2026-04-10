@@ -622,6 +622,12 @@ set_puff <- function(inpfile, paramdf, set.all=T) {
     val.count = sum(paramdf$name==param)
     ln = grep(paste0('!',param,'='),gsub(' ','',inpfile))
     
+    #un-comment an existing row when parameter not found
+    if(length(ln)==0) {
+      ln = grep(paste0('\\*',param,'='),gsub(' ','',inpfile))[1]
+      inpfile[ln] %<>% gsub("\\*", "!", .)
+    }
+      
     #add new parameter rows when needed
     if(length(ln)>0 & length(ln) < val.count) {
       missing.count <- val.count - length(ln)
