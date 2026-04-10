@@ -1,0 +1,16 @@
+creapuff/project_workflows/IndonesiaIESR/indonesia_iesr_emissions_processing.R
+reads: 'MASTERLIST_Indonesia Coal.xlsx'
+writes: 'indonesia_iesr_emission_pathways v2, with stack data.RDS'
+
+creapuff/project_workflows/IndonesiaIESR/indonesia_iesr_export_CALPUFF_inputs.R
+reads: 'indonesia_iesr_emission_pathways v2, with stack data.RDS'
+writes: 'emissions inputs, with clustering.csv'; 'emissions, clustered.csv'
+
+creapuff/project_workflows/IndonesiaIESR/workflow_calpuff_IndonesiaIESR.R
+reads: 'emissions, clustered.csv'
+writes: concentration csvs
+
+
+
+
+creapuff/project_workflows/Indonesia_RUPTL2025/indonesia_RUPTL_emissions_processing.R

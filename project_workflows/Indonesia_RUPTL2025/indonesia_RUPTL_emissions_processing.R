@@ -9,9 +9,9 @@ require(creapuff)
 require(creahelpers)
 require(rcrea)
 
-emissions_dir='project_workflows/IndonesiaIESR/data'
+emissions_dir='project_workflows/Indonesia_RUPTL2025/data'
 emissions_file=file.path(emissions_dir, 'MASTERLIST_Indonesia CFPPs - PLN & IPP and captive.xlsx')
-gcpt_file=file.path(emissions_dir, 'Global-Coal-Plant-Tracker-January-2025.xlsx')
+gcpt_file=file.path(emissions_dir, 'Global-Coal-Plant-Tracker-January-2026.xlsx')
 
 project_dir='G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP'
 output_dir=project_dir
@@ -120,11 +120,11 @@ emis_long %<>% group_by(region, province) %>%
   })
    
 #add health impact per GWh for prioritization
-emissions_dir <- "G:/IndonesiaIESR/emissions"
+emissions_dir_old <- "G:/IndonesiaIESR/emissions"
 #emissions_dir <- "G:/Shared drives/CREA-HIA/Projects/Indonesia_JETP/"
 
 #read clusters
-clusters <- read_csv(file.path(emissions_dir, 'emissions, clustered, with missing sources.csv')) %>% to_sf_points() %>% 
+clusters <- read_csv(file.path(emissions_dir_old, 'emissions, clustered, with missing sources.csv')) %>% to_sf_points() %>% 
   mutate(cluster=tolower(emission_names))
 
 #add clustering
@@ -133,8 +133,28 @@ emis_long %>% ungroup %>% distinct(CFPP.name, Latitude, Longitude) %>% to_sf_poi
          distance_to_cluster=st_distance(., clusters) %>% apply(1, min)) ->
   clustering
 
-emis_long %<>% left_join(clustering)
+clustering %<>% left_join(clusters %>% st_drop_geometry() %>% select(cluster, emission_names))
+
+clusters$emission_names %>% force_numeric() %>% max -> last_cluster_no
+clustering %<>% mutate(is_new_cluster=distance_to_cluster>1e3)
+
+clustering %<>% filter(is_new_cluster) %>% 
+  group_by(new_cluster_number=cluster(., 1)) %>% 
+  mutate(emission_names=paste0(CFPP.name[1] %>% gsub(' ', '', .) %>% substr(1,5) %>% 
+                                 paste0(last_cluster_no+new_cluster_number)),
+         cluster=tolower(emission_names)) %>% 
+  ungroup %>%  
+  bind_rows(clustering %>% filter(!is_new_cluster)) %>% 
+  select(-new_cluster_number, -distance_to_cluster)
+
+emis_long %<>% left_join(clustering %>% st_drop_geometry())
+
 emis_long %>% write_csv(file.path(emissions_dir, 'RUPTL emissions by unit, with cluster.csv'))
+
+#add stack information
+project_dir=emissions_file
+output_dir=project_dir
+source("project_workflows/Indonesia_RUPTL2025/indonesia_RUPTL_export_CALPUFF_inputs.R")
 
 source('~/creahia/project_workflows/Indonesia_RUPTL/do_hia_function.R')
 hia_plants <- emis_long %>% mutate(year=2024, utilization=base_utilization, scenario='base_year') %>% do_hia()

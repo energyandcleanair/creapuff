@@ -99,7 +99,7 @@ read_xlsx(emissions_file, sheet='Co-firing inputs', skip=0) %>%
   filter(!is.na(cofiring_name)) -> cofiring_data
 
 #add name matching from old data
-read_xlsx(file.path(emissions_dir, 'MASTERLIST_Indonesia Coal.xlsx'), sheet='PLN & IPP', skip=1) %>% 
+read_xlsx(file.path("project_workflows/IndonesiaIESR/data", 'MASTERLIST_Indonesia Coal.xlsx'), sheet='PLN & IPP', skip=1) %>% 
   set_names(make.names(names(.))) %>% 
   select(CFPP.name, cofiring_name=matches('name.*co\\.firing')) %>% 
   distinct() ->
