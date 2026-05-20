@@ -271,7 +271,6 @@ calpuff_done=plants[paste0(plants, '.CON') %>% file.path(output_dir, .) %>% file
 calpost_done=plants[paste0(plants, '_totalpm.CON') %>% file.path(output_dir, .) %>% file.exists()]
 
 queue=setdiff(calpuff_done, calpost_done)
-queue=queue[1]
 
 # Load all CAPUFF results, from calpuff_result_*.RDS
 calpuff_results_all <- file.path(output_dir, paste0('calpuff_result_', queue,'.RDS')) %>% lapply(readRDS)  
@@ -330,8 +329,8 @@ for (plant in queue) {
 }
 
 #write out bat files to run in batches
-queue %>% split(1:4) -> batches
-for(i in seq_along(batches)) {
+queue %>% split(2:3) -> batches
+for(i in names(batches)) {
   paste0('pu_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> pu_lines
   paste0('calpost_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> cp_lines
   

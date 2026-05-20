@@ -8,7 +8,7 @@ writes: 'emissions inputs, with clustering.csv'; 'emissions, clustered.csv'
 
 creapuff/project_workflows/IndonesiaIESR/workflow_calpuff_IndonesiaIESR.R
 reads: 'emissions, clustered.csv'
-writes: concentration csvs
+writes: CALPUFF.INPs, concentration csvs
 
 
 
