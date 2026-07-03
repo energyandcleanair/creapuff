@@ -706,7 +706,7 @@ make_params <- function(out_files) {
       XORIGKM=out_files$GridX,
       YORIGKM=out_files$GridY)
   
-  if(is.na(as.numeric(paramlist$IBHR)+as.numeric(paramlist$IBHR))) 
+  if(is.na(as.numeric(paramlist$IBHR)+as.numeric(paramlist$IEHR))) 
     stop('cannot retrieve start and end hour from outfiles$StartDate and outfiles$EndDate')
   
   set_param(name=paramlist)
