@@ -4,18 +4,19 @@
 library(lubridate)
 library(tidyverse)
 library(magrittr)
-library(creapuff)
+#library(creapuff)
 library(readxl)
 library(writexl)
 library(pbapply)
 library(parallel)
+require(raster)
 
 list.files('R', '\\.R$', full.names=T) %>% lapply(source)
 
 # project_dir="Z:/"            # network disk (wrf_data). If Z disk is not present: mount 10.58.186.210:/wrf_data Z:)
 project_dir="G:/IndonesiaIESR"       # calpuff_external_data-2 persistent disk (project data)
 
-load(file.path(project_dir, 'CALPUFF_setup.RData'))
+#load(file.path(project_dir, 'CALPUFF_setup.RData'))
 
 
 # Parameters ###################################################################
@@ -99,8 +100,8 @@ calmet_result$params %>% lapply(data.frame) %>% bind_rows(.id='grid_name') %>% m
          GridNY=NY,
          GridX=XORIGKM,
          GridY=YORIGKM) %>%
-  mutate(StartDate=paste(IBYR, IBMO, IBDY) %>% ymd %>% format("%Y%m%d"),
-         EndDate=paste(IEYR, IEMO, IEDY) %>% ymd %>% format("%Y%m%d"),
+  mutate(StartDate=paste(IBYR, IBMO, IBDY, IBHR) %>% ymd_h %>% format("%Y%m%d%H"),
+         EndDate=paste(IEYR, IEMO, IEDY, IEHR) %>% ymd_h %>% format("%Y%m%d%H"),
          TZ=ABTZ %>% gsub('UTC', '', .) %>% as.numeric %>% divide_by(100)) -> out_files
 target_crs <- get_utm_proj(zone = unique(out_files$UTMZ), hem = unique(out_files$UTMH))
 
@@ -220,7 +221,8 @@ for(run in queue) {
   receptors_run %>% saveRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
 }
 
-#queue=runs
+queue=runs[!file.exists(file.path(output_dir, paste0(runs, '_CALPUFF_7.0.inp')))]
+
 for(run in queue) {
   sources <- emissions_data %>% filter(emission_names==run) %>% to_spdf %>% spTransform(target_crs)
   receptors_run <- readRDS(file.path(output_dir, paste0('receptors_', run, '.RDS')))
@@ -254,7 +256,7 @@ for(run in queue) {
 #write out bat files to run in batches
 queue=runs[paste0(runs, '.CON') %>% file.path(output_dir, .) %>% file.exists() %>% not]
 #queue=runs
-file.path(output_dir, paste0(queue, '_CALPUFF_7.0.inp')) %>% split(1) -> batches
+file.path(output_dir, paste0(queue, '_CALPUFF_7.0.inp')) %>% split(1:13) -> batches
 
 #calpuff_result %>% lapply('[[', 'inpfiles_created') %>% unlist %>% split(1:6) -> batches
 for(i in seq_along(batches)) {
@@ -329,7 +331,7 @@ for (plant in queue) {
 }
 
 #write out bat files to run in batches
-queue %>% split(2:3) -> batches
+queue %>% split(1:5) -> batches
 for(i in names(batches)) {
   paste0('pu_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> pu_lines
   paste0('calpost_', batches[[i]], '.bat') %>% file.path(output_dir, .) %>% lapply(readLines) -> cp_lines
