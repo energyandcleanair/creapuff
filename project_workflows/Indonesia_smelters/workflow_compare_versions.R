@@ -16,11 +16,13 @@ read_xlsx(plant_file_old, sheet='Metal smelters', .name_repair = make.names) %>%
   mutate(across(matches('^(capacity|lat|lon)'), as.numeric)) -> smelters_old
 
 
-emis_old <- file.path(output_dir, 'emissions', 'emissions_with_cluster v2.csv') %>% read_csv()
-emis_new <- file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv') %>% read_csv()
+emis_old <- file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv') %>% read_csv()
+emis_new <- file.path(output_dir, 'emissions', 'emissions_with_cluster_APC v3.csv') %>% read_csv()
+#emis_new <- file.path(output_dir, 'emissions', 'emissions_with_cluster v3.csv') %>% read_csv()
 
-emis_old %>% group_by(pollutant) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T)))
-emis_new %>% group_by(pollutant, type) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T)))
+bind_rows(emis_old %>% mutate(version='base'), emis_new %>% mutate(version='APC')) %>% 
+  group_by(version, pollutant, type) %>% summarise(across(emissions_tpa, ~sum(.x, na.rm=T))) %>% 
+  spread(version, emissions_tpa)
 
 
 
