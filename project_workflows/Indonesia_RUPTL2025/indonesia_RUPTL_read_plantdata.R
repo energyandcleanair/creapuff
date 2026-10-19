@@ -2,7 +2,8 @@
 read_xlsx(emissions_file, sheet='PLN & IPP', skip=0) %>% 
   rename(Latitude=matches('Latitu.e'), gas_unit='Unit for gases', APC = starts_with('Emission Control'), 
          MW=contains('MW'),
-         cofiring_name=matches('name.*co.firing')) %>% 
+         cofiring_name=matches('name.*co.firing'),
+         COD_RUPTL.2025=contains('COD_RUPTL 2025')) %>% 
   set_names(make.names(names(.))) %>% 
   mutate(across(c(Latitude, Longitude), as.numeric)) ->
   emis
@@ -10,9 +11,9 @@ read_xlsx(emissions_file, sheet='PLN & IPP', skip=0) %>%
 read_xlsx(emissions_file, sheet='Captive', skip=0) %>% mutate(Owner='captive') %>% 
   set_names(make.names(names(.))) %>% 
   rename(COD=matches('Year|COD'), MW=contains('MW'), province=contains('province'),
-         Status.July.2024=Status.Jul.2024) %>% 
+         Status.July.2026=Status.Jul.2026) %>% 
   #remove duplicate entries
-  filter(!(GEM.ID %in% emis$GEM.ID & GEM.ID!='NA' & !is.na(GEM.ID)),
+  filter(!(GEM.ID %in% emis$GEM.ID),
          !(CFPP.name %in% emis$CFPP.name)) -> captive
   #mutate(CFPP.name=paste(Plant, Unit)) 
 
@@ -22,7 +23,7 @@ emis$GEM.ID[emis$GEM.ID=='NA'] <- NA
 
 
 #derive new GEM IDs
-emis %<>% mutate(gem_unit_phase_id=ifelse(nchar(GEM.ID)==13, GEM.ID, GEM.ID %>% gsub('G', 'G100000', .)))
+#emis %<>% mutate(gem_unit_phase_id=ifelse(nchar(GEM.ID)==13, GEM.ID, GEM.ID %>% gsub('G', 'G100000', .)))
 
 #set missing COD when 0
 emis$COD[emis$COD==0] <- NA
@@ -32,17 +33,23 @@ read_xlsx(gcpt_file, sheet='Units') %>% set_names(make_names(names(.))) %>% filt
 
 #designate a location for "Sumatera Hybrid"
 ind <- grep('Sumatra Hybrid', emis$CFPP.name)
-emis[ind, c('gem_unit_phase_id', 'Latitude', 'Longitude')] <- gcpt[grepl('Mulut Tambang', gcpt$plant_name), c('gem_unit_phase_id', 'latitude', 'longitude')]
+emis[ind, c('GEM.unit.phase.ID', 'Latitude', 'Longitude')] <- gcpt[grepl('Mulut Tambang', gcpt$plant_name), c('gem_unit_phase_id', 'latitude', 'longitude')]
 emis$CFPP.name[ind] %<>% gsub('\\(TBD) ', '', .) %>% paste('Unit', seq_along(.))
 emis$Steam.Tech.[ind] <- 'supercritical'
 
 #remove new plants not included in RUPTL
-emis %<>% filter(Owner=='captive' | COD<=2024 | !is.na(COD_RUPTL.2025))
+emis %<>% mutate(Status.July.2026=case_when(!is.na(Status.July.2026)~Status.July.2026,
+                                            COD<=2026 ~ 'operating',
+                                            In.RUPTL.2025.2034=='Yes'~'construction',
+                                            grepl('Bima ', CFPP.name)~'construction'))
+
+emis %<>% filter(Status.July.2026 %in% c('operating', 'construction', 'permitted', 'pre-permit', 'announced'), 
+                 Owner=='captive' | COD<=2026 | !is.na(COD_RUPTL.2025) | Status.July.2026=='construction')
 
 gcpt %>% mutate(gem_plant_unit_name = plant_name %>% gsub(' power station', '', .) %>% paste(unit_name)) %>% 
-  select(gem_unit_phase_id, gem_plant_unit_name, Status=status, Steam.Tech._GEM=combustion_technology, COD_GEM=start_year) %>% 
+  select(GEM.unit.phase.ID=gem_unit_phase_id, gem_plant_unit_name, Status=status, Steam.Tech._GEM=combustion_technology, COD_GEM=start_year) %>% 
   left_join(emis, .) %>% 
-  mutate(Status=na.cover(Status, Status.July.2024),
+  mutate(Status=na.cover(Status.July.2026, Status),
          COD=COD_RUPTL.2025 %>% na.cover(COD_GEM) %>% na.cover(COD),
          Steam.Tech.=na.cover(Steam.Tech., Steam.Tech._GEM)) ->
   emis
@@ -54,7 +61,7 @@ emis %<>% group_by(CFPP.name) %>%
 
 #add province based on coordinates
 require(sf)
-get_adm(1, 'low') %>% subset(NAME_0=='Indonesia') %>% st_as_sf() -> adm1
+creahelpers::get_adm(1, 'low') %>% subset(NAME_0=='Indonesia') %>% st_as_sf() -> adm1
 emis %<>% 
   distinct(Latitude, Longitude) %>% 
   to_spdf %>% st_as_sf() %>% 
@@ -74,7 +81,8 @@ emis %<>%
   mutate(across(Status, tolower),
          COD=case_when(COD>0~COD,
                        Status=='construction'~year(today())+2,
-                       Status=='pre-permit'~year(today())+5,
+                       Status =='announced'~year(today())+7,
+                       Status =='pre-permit'~year(today())+5,
                        Status=='operating'~year(today())-2,
                        Status %in% c('cancelled', 'shelved')~Inf),
          Hg.in.coal..ppb = na.cover(Hg.in.coal..ppb, median(Hg.in.coal..ppb, na.rm=T)),
@@ -82,30 +90,45 @@ emis %<>%
 
 
 #add cofiring data
-read_xlsx(emissions_file, sheet='Co-firing inputs', skip=0) %>% 
-  set_names(make.names(names(.))) %>% 
-  select(cofiring_name=Name.of.CPP, 
-         cofiring_status=Status,
-         cofiring_share=Co.firing.Portion, 
-         biomass_type=Type.of.Biomass,
-         cofiring_notes=Notes.Updates,
-         cofiring_MW=contains('MW'),
-         cofiring_date=contains('.date.'),
-         cofiring_future_target=Planned.future.percentage,
-         cofiring_target_date=Target.year) %>% 
-  mutate(across(cofiring_MW, ~sapply(.x, function(x) x %>% gsub('x', '*', .) %>% parse(text=.) %>% eval)),
-         across(cofiring_share, as.numeric),
-         cofiring_share=na.cover(cofiring_share, median(cofiring_share, na.rm=T))) %>% 
-  filter(!is.na(cofiring_name)) -> cofiring_data
+emis %>% names %>% grep('Biomass', ., value=T)
+emis$Biomass.Co.firing.Status %>% unique
+emis$Biomass.share %>% unique
+emis %<>% rename(cofiring_status=Biomass.Co.firing.Status, cofiring_share=Biomass.share, biomass_type=Biomass.type) %>% 
+  mutate(across(cofiring_share, as.numeric),
+         cofiring_date=ifelse(cofiring_status=="Commercial/implemented", 2021, NA),
+         cofiring_future_target=ifelse(cofiring_status=="Planned" & is.na(cofiring_share), median(cofiring_share, na.rm=T), NA), 
+         cofiring_target_date=ifelse(cofiring_status=="Planned", 2030, NA), 
+         cofiring_share=case_when(cofiring_status=="Commercial/implemented" & is.na(cofiring_share)~median(cofiring_share, na.rm=T), T~cofiring_share))
 
-#add name matching from old data
-read_xlsx(file.path(emissions_dir, 'MASTERLIST_Indonesia Coal.xlsx'), sheet='PLN & IPP', skip=1) %>% 
-  set_names(make.names(names(.))) %>% 
-  select(CFPP.name, cofiring_name=matches('name.*co\\.firing')) %>% 
-  distinct() ->
-  plant_name_dict
 
-emis %<>% left_join(plant_name_dict) %>% mutate(cofiring_name=ifelse(grepl('Sofifi', CFPP.name), 'Sofifi', cofiring_name)) %>% left_join(cofiring_data)
+#old approach
+if(F) {
+  read_xlsx(emissions_file, sheet='Co-firing inputs', skip=0) %>% 
+    set_names(make.names(names(.))) %>% 
+    select(cofiring_name=Name.of.CPP, 
+           cofiring_status=Status,
+           cofiring_share=Co.firing.Portion, 
+           biomass_type=Type.of.Biomass,
+           cofiring_notes=Notes.Updates,
+           cofiring_MW=contains('MW'),
+           cofiring_date=contains('.date.'),
+           cofiring_future_target=Planned.future.percentage,
+           cofiring_target_date=Target.year) %>% 
+    mutate(across(cofiring_MW, ~sapply(.x, function(x) x %>% gsub('x', '*', .) %>% parse(text=.) %>% eval)),
+           across(cofiring_share, as.numeric),
+           cofiring_share=na.cover(cofiring_share, median(cofiring_share, na.rm=T))) %>% 
+    filter(!is.na(cofiring_name)) -> cofiring_data
+  
+  #add name matching from old data
+  read_xlsx(file.path(emissions_dir_old, 'MASTERLIST_Indonesia Coal.xlsx'), sheet='PLN & IPP', skip=1) %>% 
+    set_names(make.names(names(.))) %>% 
+    select(CFPP.name, cofiring_name=matches('name.*co\\.firing')) %>% 
+    distinct() ->
+    plant_name_dict
+  
+  emis %<>% left_join(plant_name_dict) %>% mutate(cofiring_name=ifelse(grepl('Sofifi', CFPP.name), 'Sofifi', cofiring_name)) %>% left_join(cofiring_data)
+}
+
 
 names(emis) %<>% gsub('Conc\\.\\.', '', .)
 
@@ -226,6 +249,7 @@ coal_gen %>% ggplot(aes(year, value, col=scenario)) +
 #retrieve base utilization
 coal_gen %>% filter(year==2024, variable=='load_factor', grepl('RUPTL 2025-2034', scenario)) %>% 
   ungroup %>% distinct(source, scenario, value) -> base_utilization
+
 #utilization_uplift = 0.675 / base_utilization_gcam #actual utilization calculated from BP generation data
 utilization_uplift = 1 #not needed when using RUPTL data
   

@@ -217,7 +217,7 @@ runPostprocessing <- function(
   params[nrow(params)+1,] <- c('PSTLST', file.path(output_dir, paste0(run_name_out, "_CALPOST.LST")))
   params[nrow(params)+1,] <- c('TSUNAM', cp_run_name)
   params[nrow(params)+1,] <- c('TUNAM', cp_run_name)
-  params[nrow(params)+1,] <- c('PLPATH', output_dir_cp,"not set")
+  params[nrow(params)+1,] <- c('PLPATH', output_dir_cp)
   params[nrow(params)+1,] <- c('TSPATH', ifelse(run_timeseries, output_dir_cp,"not set"))
   params[nrow(params)+1,] <- c("LD", run_discrete_receptors %>% as.character %>% substr(1,1))
   params[nrow(params)+1,] <- c("LG", run_gridded_receptors %>% as.character %>% substr(1,1))

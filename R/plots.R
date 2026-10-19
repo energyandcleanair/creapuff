@@ -212,7 +212,7 @@ plot_results <- function(calpuff_files,
       
       if(!is.na(thr) & exceed) { #if a threshold has been specified, ensure it is included in levels
         lvls <- lvls[abs(lvls / thr - 1) > .1] #eliminate levels close to the threshold
-        lvls <- sort(unique(c(lvls,thr)))
+        lvls <- sort(unique(unlist(c(lvls,thr))))
       }
       
       contP_UTM <- raster2contourPolys(conc_R,levels=lvls)[-1,]
@@ -261,17 +261,22 @@ plot_results <- function(calpuff_files,
                   labels=level,
                   LabelScale=0.5)
         
-        kml_layer(obj=plants_plot, subfolder.name="Modeled sources",
-                  size=1,
-                  alpha=1,altitude=0,
-                  labels=Source,
-                  LabelScale=0.5,sname="labels", shape="factory.png")
+        if(!is.null(plants_plot)) {
+          kml_layer(obj=plants_plot, subfolder.name="Modeled sources",
+                    size=1,
+                    alpha=1,altitude=0,
+                    labels=Source,
+                    LabelScale=0.5,sname="labels", shape="factory.png")
+        }
         
         kml_screen(image.file="label.png",position="UL",sname="Label")
         kml_close(kml_file)
         
+        old_wd <- getwd()
+        on.exit(setwd(old_wd))
+        setwd(output_dir)
         zipping_function(kmz_file,
-                         c(kml_file, file.path(output_dir,c("factory.png","label.png"))))
+                         basename(c(kml_file, file.path(output_dir,c("factory.png","label.png")))))
         
         if(!file.exists(kmz_file)) stop("creating kmz failed")
         file.remove(kml_file)

@@ -47,10 +47,10 @@ scenarios_to_plot=calpuff_files$scenario %>% unique %>% grep('^all', ., value=T)
 calpuff_files %<>% filter(scenario %in% scenarios_to_plot, 
                           species %in% c('so2', 'no2', 'pm25', 'hg', 'pm'), !is.na(threshold) | period=='annual')
 
-calpuff_files %>% data.frame %>% make_tifs(grids=grids, overwrite = F)
+calpuff_files %>% data.frame %>% make_tifs(grids=grids, overwrite = F, output_dir=output_dir)
 
 # Select tif data 
-calpuff_files_all <- get_calpuff_files(ext=".tif$", gasunit = 'ug', dir=input_dir, hg_scaling=1e-3) %>% 
+calpuff_files_all <- get_calpuff_files(ext=".tif$", gasunit = 'ug', dir=output_dir, hg_scaling=1e-3) %>% 
   filter(scenario %in% scenarios_to_plot) %>% 
   mutate(scenario_description='all smelters and captive power plants',
          speciesName=recode(speciesName, 'fly ash'='toxic particle')) %>% 
@@ -118,7 +118,7 @@ calpuff_files_all %>%
          subtitle_facets=year, 
          subtitle='attributed to smelters and associated captive power plants, by year') %>% 
   group_by(period, species, type) %>% 
-  filter(type=='deposition') %>% 
+  #filter(type!='deposition') %>% 
   #filter(cur_group_id()==1) %>% 
   plot_contours(plot_bb=plot_bb,
                 contour_type='both',
@@ -136,20 +136,25 @@ calpuff_files_all %>%
                 contour_guide = guide_legend(nrow=1),
                 quicksave_options = list(scale=1.33, logo_hjust=1, height=6))
 
-pop <- raster(creahelpers::get_population_path("gpw_v4_population_density_adjusted_to_2015_unwpp_country_totals_rev11_2020_30_sec.tif"))
+pop_raster_file <- file.path(input_dir, 'population_for_grid.grd')
 
-grids$gridR <- calpuff_files_all$path[1] %>% raster %>% raster
+if(!file.exists(pop_raster_file)) {
+  pop <- raster(creahelpers::get_population_path("gpw_v4_population_density_adjusted_to_2015_unwpp_country_totals_rev11_2020_30_sec.tif"))
+  
+  grids$gridR <- calpuff_files_all$path[1] %>% raster %>% raster
+  
+  popC <- crop(pop,grids$gridLL)
+  popC[is.na(popC)] <- 0
+  popC %<>% aggregate(4)
+  popUTM <- projectRaster(popC,crs = CRS(proj4string(grids$gridR)))
+  popD_CP <- resample(popUTM,grids$gridR)
+  pop <- popD_CP  * area(popD_CP)
+  names(pop) <- "pop"
+  
+  pop %>% writeRaster(pop_raster_file, overwrite=T)
+}
 
-popC <- crop(pop,grids$gridLL)
-popC[is.na(popC)] <- 0
-popC %<>% aggregate(4)
-popUTM <- projectRaster(popC,crs = CRS(proj4string(grids$gridR)))
-popD_CP <- resample(popUTM,grids$gridR)
-pop <- popD_CP  * area(popD_CP)
-names(pop) <- "pop"
-
-pop %>% writeRaster(file.path(input_dir, 'population_for_grid.grd'), overwrite=T)
-pop <- raster(file.path(input_dir, 'population_for_grid.grd'))
+pop <- raster(pop_raster_file)
 
 calpuff_files_all %>% 
   filter(!is.na(threshold)) %>% 
@@ -185,3 +190,24 @@ depo$by_landuse %>% filter(broad.cat != 'ocean') %>% group_by(pollutant, scenari
 
 depo$into_protected_areas %>% filter(scenario=='all2030') %>% group_by(variable, species) %>% arrange(desc(value)) %>% slice_max(value, n=5) %>% 
   write_csv(file.path(output_dir, 'protected areas most affected by deposition.csv'))
+
+
+calpuff_files_all %>% 
+  mutate(across(starts_with('threshold'), ~round(.x,0))) %>% 
+  mutate(title = make_titletxt(., include_scenario=F, line_break=F),
+         scenario_description='smelters and associated captive power plants',
+         subtitle='attributed to smelters and associated captive power plants') %>% 
+  filter(type=='deposition', year==2030) %>% 
+  plot_results(output_dir=output_dir,
+               #plants=point_sources_to_plot %>% filter(year==2030) %>% mutate(Source=paste0(type, '; ', Commodity_broad)) %>% as('Spatial'),
+               #plant_names=NULL,
+               #plot_km=700,
+               plot_bb=point_sources_to_plot %>% st_transform(crs(grids$gridR)) %>% as('Spatial') %>% extent %>% magrittr::add(700),
+               outputs="kml",
+               zipping_function=zip::zip)
+
+depo$into_protected_areas %>% filter(scenario=='all2030') %>% group_by(variable, species) %>% arrange(desc(value)) %>% slice_max(value, n=20) -> 
+  areas_to_plot
+wdpa_areas %>% subset(NAME %in% areas_to_plot$wdpa_area) %>% st_as_sf %>% st_write(file.path(output_dir, 'most_affected_WDPA_areas.kml'))
+
+point_sources_to_plot %>% st_as_sf %>% st_write(file.path(output_dir, 'smelters.kml'))
